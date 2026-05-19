@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<title>STELLAR DRIFT - Phase 1</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: #000;
+    color: #ccd;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+  }
+  #game-wrapper {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+  }
+  canvas {
+    display: block;
+    background: #000;
+    cursor: crosshair;
+    max-width: 100%;
+    max-height: 100%;
+  }
+  #hud {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    color: rgba(200, 220, 255, 0.7);
+    font-size: 13px;
+    letter-spacing: 1px;
+    pointer-events: none;
+    text-shadow: 0 0 10px rgba(100, 150, 255, 0.5);
+    font-family: 'Segoe UI', sans-serif;
+  }
+  #hud .label { color: rgba(150, 180, 220, 0.5); font-size: 10px; letter-spacing: 2px; }
+  #hud .value { color: #fff; font-size: 18px; font-weight: 300; }
+  #controls {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    color: rgba(180, 200, 230, 0.45);
+    font-size: 11px;
+    letter-spacing: 1px;
+    pointer-events: none;
+  }
+  #controls kbd {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 3px;
+    padding: 2px 6px;
+    margin: 0 2px;
+    font-family: monospace;
+    color: #aef;
+  }
+  #phase {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    color: rgba(150, 180, 220, 0.4);
+    font-size: 11px;
+    letter-spacing: 3px;
+    pointer-events: none;
+    text-align: right;
+  }
+  #phase .title {
+    color: rgba(200, 220, 255, 0.7);
+    font-size: 14px;
+    margin-bottom: 2px;
+  }
+</style>
+</head>
+<body>
+<div id="game-wrapper">
+  <canvas id="game"></canvas>
+</div>
+
+<div id="hud">
+  <div class="label">SCORE</div>
+  <div class="value" id="score">0</div>
+</div>
+
+<div id="phase">
+  <div class="title">STELLAR DRIFT</div>
+  <div>PHASE 1 · CORE</div>
+</div>
+
+<div id="controls">
+  <kbd>←</kbd><kbd>→</kbd> ROTATE THRUSTER &nbsp;·&nbsp;
+  <kbd>↑</kbd> IGNITE &nbsp;·&nbsp;
+  <kbd>MOUSE</kbd> AIM &nbsp;·&nbsp;
+  <kbd>LMB</kbd> FIRE
+</div>
+
+<script>
+'use strict';
+
+// ============================================================================
+// STELLAR DRIFT - Phase 1: Core gameplay
+// Modern 2D approach: vector rendering, glow, smooth physics
+// ============================================================================
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+
+// Resize canvas to fit window (preserve crisp rendering)
+function resize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  canvas.width = w;
+  canvas.height = h;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ============================================================================
+// INPUT
+// ============================================================================
+const keys = {};
+const mouse = { x: 0, y: 0, down: false };
+
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['KeyW','KeyA','KeyS','KeyD','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = e.clientX - rect.left;
+  mouse.y = e.clientY - rect.top;
+});
+canvas.addEventListener('mousedown', e => { if (e.button === 0) mouse.down = true; });
+canvas.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ============================================================================
+// STARFIELD - generated once, drawn each frame
+// Three layers (parallax) + the Milky Way band across the middle
+// ============================================================================
+const stars = [];
+const STAR_LAYERS = 3;
+function generateStars() {
+  stars.length = 0;
+  const w = canvas.width, h = canvas.height;
+  // Layer 1: tiny distant stars (many)
+  for (let i = 0; i < 600; i++) {
+    stars.push({
+      x: Math.random() * w * 1.5 - w * 0.25,
+      y: Math.random() * h * 1.5 - h * 0.25,
+      size: Math.random() * 0.8 + 0.2,
+      brightness: Math.random() * 0.5 + 0.2,
+      layer: 0,
+      twinkle: Math.random() * Math.PI * 2,
+      twinkleSpeed: Math.random() * 0.02 + 0.005,
+      hue: Math.random() < 0.85 ? 220 : (Math.random() < 0.5 ? 30 : 200)  // mostly bluish-white
+    });
+  }
+  // Layer 2: medium stars
+  for (let i = 0; i < 200; i++) {
+    stars.push({
+      x: Math.random() * w * 1.5 - w * 0.25,
+      y: Math.random() * h * 1.5 - h * 0.25,
+      size: Math.random() * 1.5 + 0.6,
+      brightness: Math.random() * 0.4 + 0.5,
+      layer: 1,
+      twinkle: Math.random() * Math.PI * 2,
+      twinkleSpeed: Math.random() * 0.03 + 0.01,
+      hue: Math.random() < 0.7 ? 220 : (Math.random() < 0.4 ? 30 : 0)
+    });
+  }
+  // Layer 3: bright foreground stars (few)
+  for (let i = 0; i < 40; i++) {
+    stars.push({
+      x: Math.random() * w * 1.5 - w * 0.25,
+      y: Math.random() * h * 1.5 - h * 0.25,
+      size: Math.random() * 2 + 1.5,
+      brightness: 0.9,
+      layer: 2,
+      twinkle: Math.random() * Math.PI * 2,
+      twinkleSpeed: Math.random() * 0.04 + 0.015,
+      hue: Math.random() < 0.6 ? 220 : (Math.random() < 0.5 ? 30 : 350)
+    });
+  }
+}
+
+// Milky Way: a dense band of tiny stars + nebula glow
+const milkyWayStars = [];
+function generateMilkyWay() {
+  milkyWayStars.length = 0;
+  const w = canvas.width, h = canvas.height;
+  const cy = h / 2;
+  const bandHeight = h * 0.45;
+  for (let i = 0; i < 2500; i++) {
+    // Distribution biased toward the center of the band (gaussian-ish)
+    const r1 = Math.random(), r2 = Math.random();
+    const gauss = (r1 + r2 - 1);  // -1 to 1, biased to 0
+    const y = cy + gauss * bandHeight * 0.5 + Math.sin(Math.random() * 10) * 20;
+    milkyWayStars.push({
+      x: Math.random() * w * 1.5 - w * 0.25,
+      y: y + (Math.random() - 0.5) * 30,
+      size: Math.random() * 0.6 + 0.2,
+      brightness: (1 - Math.abs(gauss)) * 0.6 + 0.1,
+      hue: Math.random() < 0.5 ? 30 : (Math.random() < 0.6 ? 220 : 280)
+    });
+  }
+}
+
+generateStars();
+generateMilkyWay();
+window.addEventListener('resize', () => {
+  generateStars();
+  generateMilkyWay();
+});
+
+// Pre-render the Milky Way to an offscreen canvas (it doesn't change)
+let milkyWayCanvas = null;
+function bakeMilkyWay() {
+  milkyWayCanvas = document.createElement('canvas');
+  milkyWayCanvas.width = canvas.width;
+  milkyWayCanvas.height = canvas.height;
+  const mctx = milkyWayCanvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const cy = h / 2;
+
+  // Nebula glow - soft gradient bands
+  // Main band (purple/blue)
+  const grad1 = mctx.createLinearGradient(0, cy - h * 0.25, 0, cy + h * 0.25);
+  grad1.addColorStop(0, 'rgba(60, 30, 90, 0)');
+  grad1.addColorStop(0.3, 'rgba(70, 40, 110, 0.18)');
+  grad1.addColorStop(0.5, 'rgba(100, 70, 140, 0.28)');
+  grad1.addColorStop(0.7, 'rgba(70, 40, 110, 0.18)');
+  grad1.addColorStop(1, 'rgba(60, 30, 90, 0)');
+  mctx.fillStyle = grad1;
+  mctx.fillRect(0, 0, w, h);
+
+  // Warmer inner glow
+  const grad2 = mctx.createLinearGradient(0, cy - h * 0.12, 0, cy + h * 0.12);
+  grad2.addColorStop(0, 'rgba(150, 100, 80, 0)');
+  grad2.addColorStop(0.5, 'rgba(180, 130, 100, 0.15)');
+  grad2.addColorStop(1, 'rgba(150, 100, 80, 0)');
+  mctx.fillStyle = grad2;
+  mctx.fillRect(0, 0, w, h);
+
+  // Dark dust lanes (subtractive feel via dark patches)
+  mctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  for (let i = 0; i < 8; i++) {
+    const dx = Math.random() * w;
+    const dy = cy + (Math.random() - 0.5) * h * 0.2;
+    const dw = 80 + Math.random() * 200;
+    const dh = 10 + Math.random() * 25;
+    mctx.beginPath();
+    mctx.ellipse(dx, dy, dw, dh, Math.random() * 0.4 - 0.2, 0, Math.PI * 2);
+    mctx.fill();
+  }
+
+  // Stars with additive-ish blending
+  mctx.globalCompositeOperation = 'lighter';
+  for (const s of milkyWayStars) {
+    mctx.fillStyle = `hsla(${s.hue}, 70%, 80%, ${s.brightness})`;
+    mctx.beginPath();
+    mctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    mctx.fill();
+  }
+  mctx.globalCompositeOperation = 'source-over';
+}
+bakeMilkyWay();
+window.addEventListener('resize', () => setTimeout(bakeMilkyWay, 50));
+
+// ============================================================================
+// GAME OBJECTS
+// ============================================================================
+const player = {
+  x: 0, y: 0,
+  vx: 0, vy: 0,
+  angle: -Math.PI / 2,    // ship orientation - FIXED, always points up
+  turretAngle: -Math.PI / 2,  // gun turret angle (rotates fast toward mouse)
+  radius: 14,
+  fireCooldown: 0,
+  // Thruster disc - rotates independently
+  thrusterAngle: Math.PI / 2,  // initially points down on screen (so thrust is up)
+  desiredThrustAngle: 0,
+  hasInput: false,
+  throttle: 0
+};
+
+const enemies = [];
+const bullets = [];
+const enemyBullets = [];
+
+function spawnPlayer() {
+  player.x = canvas.width / 2;
+  player.y = canvas.height / 2;
+  player.vx = 0; player.vy = 0;
+}
+spawnPlayer();
+
+// ============================================================================
+// ENEMY SPAWNING
+// ============================================================================
+let nextEnemyTime = 3000;  // ms after game start
+let gameTime = 0;
+let score = 0;
+
+function spawnEnemy() {
+  // Spawn off-screen edge
+  const side = Math.floor(Math.random() * 4);
+  let x, y;
+  if (side === 0) { x = -50; y = Math.random() * canvas.height; }
+  else if (side === 1) { x = canvas.width + 50; y = Math.random() * canvas.height; }
+  else if (side === 2) { x = Math.random() * canvas.width; y = -50; }
+  else { x = Math.random() * canvas.width; y = canvas.height + 50; }
+
+  enemies.push({
+    x: x, y: y,
+    vx: 0, vy: 0,
+    angle: 0,
+    aimAngle: 0,
+    radius: 22,
+    health: 3,
+    fireCooldown: 60,
+    thinkCooldown: 0,
+    targetAngle: 0,
+    thrusting: false,
+    thrustPower: 0
+  });
+}
+
+// ============================================================================
+// UPDATE
+// ============================================================================
+let lastTime = performance.now();
+function update(now) {
+  const dt = Math.min(33, now - lastTime);
+  lastTime = now;
+  gameTime += dt;
+  const dtSec = dt / 1000;
+
+  // --- Player aiming: turret rotates fast toward mouse, ship stays fixed ---
+  const dx = mouse.x - player.x;
+  const dy = mouse.y - player.y;
+  const targetTurretAngle = Math.atan2(dy, dx);
+  // Smoothly rotate turret toward mouse - fast but not instant
+  let tDiff = targetTurretAngle - player.turretAngle;
+  while (tDiff > Math.PI) tDiff -= Math.PI * 2;
+  while (tDiff < -Math.PI) tDiff += Math.PI * 2;
+  const TURRET_SPEED = 18;  // radians/sec - very fast, almost instant
+  const tStep = TURRET_SPEED * dtSec;
+  if (Math.abs(tDiff) < tStep) {
+    player.turretAngle = targetTurretAngle;
+  } else {
+    player.turretAngle += Math.sign(tDiff) * tStep;
+  }
+  while (player.turretAngle > Math.PI) player.turretAngle -= Math.PI * 2;
+  while (player.turretAngle < -Math.PI) player.turretAngle += Math.PI * 2;
+
+  // --- Player thrust ---
+  // Left/Right arrows rotate the thruster disc directly.
+  // Up arrow ignites the engine (thrust opposite to disc orientation).
+  const ROTATE_SPEED = 4.16;  // radians/sec - was 3.2, +30%
+  if (keys['ArrowLeft'])  player.thrusterAngle -= ROTATE_SPEED * dtSec;
+  if (keys['ArrowRight']) player.thrusterAngle += ROTATE_SPEED * dtSec;
+  // Normalize
+  while (player.thrusterAngle > Math.PI) player.thrusterAngle -= Math.PI * 2;
+  while (player.thrusterAngle < -Math.PI) player.thrusterAngle += Math.PI * 2;
+
+  player.hasInput = !!keys['ArrowUp'];
+
+  // Throttle ramps up while ArrowUp is held, down when released
+  const throttleTarget = player.hasInput ? 1 : 0;
+  if (throttleTarget > player.throttle) {
+    player.throttle += dtSec * 4;     // ignite over ~0.25s
+    if (player.throttle > throttleTarget) player.throttle = throttleTarget;
+  } else {
+    player.throttle -= dtSec * 6;     // cut faster
+    if (player.throttle < throttleTarget) player.throttle = throttleTarget;
+  }
+  player.throttle = Math.max(0, Math.min(1, player.throttle));
+
+  // Apply acceleration opposite to thruster orientation (flame pushes ship)
+  const THRUST = 60;   // pixels/sec^2 - very slow, naval/capital-ship feel
+  const accelAngle = player.thrusterAngle + Math.PI;
+  const ax = Math.cos(accelAngle) * THRUST * player.throttle;
+  const ay = Math.sin(accelAngle) * THRUST * player.throttle;
+
+  // Realistic physics: pure acceleration, no friction
+  player.vx += ax * dtSec;
+  player.vy += ay * dtSec;
+
+  // Soft speed cap to keep things controllable
+  const MAX_SPEED = 220;
+  const sp = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
+  if (sp > MAX_SPEED) {
+    player.vx = (player.vx / sp) * MAX_SPEED;
+    player.vy = (player.vy / sp) * MAX_SPEED;
+  }
+
+  player.x += player.vx * dtSec;
+  player.y += player.vy * dtSec;
+
+  // Wrap around screen edges (Asteroids style)
+  if (player.x < -20) player.x = canvas.width + 20;
+  if (player.x > canvas.width + 20) player.x = -20;
+  if (player.y < -20) player.y = canvas.height + 20;
+  if (player.y > canvas.height + 20) player.y = -20;
+
+  // --- Firing ---
+  if (player.fireCooldown > 0) player.fireCooldown -= dt;
+  if (mouse.down && player.fireCooldown <= 0) {
+    fireBullet();
+    player.fireCooldown = 900;  // ms between shots - classic cannon, ~1 round/sec
+  }
+
+  // --- Update bullets ---
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.x += b.vx * dtSec;
+    b.y += b.vy * dtSec;
+    b.life -= dt;
+    if (b.life <= 0 || b.x < -20 || b.x > canvas.width + 20 || b.y < -20 || b.y > canvas.height + 20) {
+      bullets.splice(i, 1);
+    }
+  }
+
+  // --- Update enemy bullets ---
+  for (let i = enemyBullets.length - 1; i >= 0; i--) {
+    const b = enemyBullets[i];
+    b.x += b.vx * dtSec;
+    b.y += b.vy * dtSec;
+    b.life -= dt;
+    if (b.life <= 0 || b.x < -50 || b.x > canvas.width + 50 || b.y < -50 || b.y > canvas.height + 50) {
+      enemyBullets.splice(i, 1);
+    }
+  }
+
+  // --- Spawn enemies (max 2 at a time, slow waves) ---
+  if (gameTime > nextEnemyTime && enemies.length < 2) {
+    spawnEnemy();
+    nextEnemyTime = gameTime + 12000 + Math.random() * 6000;  // 12-18s between attempts
+  }
+
+  // --- Enemy AI and movement ---
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+
+    // Aim at player
+    const edx = player.x - e.x;
+    const edy = player.y - e.y;
+    e.aimAngle = Math.atan2(edy, edx);
+    const distToPlayer = Math.sqrt(edx*edx + edy*edy);
+
+    // Simple AI: pick a direction every couple of seconds
+    e.thinkCooldown -= dt;
+    if (e.thinkCooldown <= 0) {
+      // Try to maintain some distance: thrust away if close, toward if far
+      if (distToPlayer < 200) {
+        e.targetAngle = e.aimAngle + Math.PI + (Math.random() - 0.5) * 1.5;
+      } else if (distToPlayer > 500) {
+        e.targetAngle = e.aimAngle + (Math.random() - 0.5) * 0.5;
+      } else {
+        // Strafe - perpendicular to player
+        e.targetAngle = e.aimAngle + Math.PI / 2 + (Math.random() < 0.5 ? 0 : Math.PI);
+      }
+      e.thinkCooldown = 800 + Math.random() * 1200;
+    }
+
+    // Thrust toward target angle
+    const ENEMY_THRUST = 35;  // slow capital-ship feel
+    const eax = Math.cos(e.targetAngle) * ENEMY_THRUST;
+    const eay = Math.sin(e.targetAngle) * ENEMY_THRUST;
+    e.vx += eax * dtSec;
+    e.vy += eay * dtSec;
+    e.thrustPower = 1;
+    e.thrustAngle = e.targetAngle;
+    e.thrusting = true;
+
+    const ESPD = Math.sqrt(e.vx*e.vx + e.vy*e.vy);
+    const E_MAX = 110;
+    if (ESPD > E_MAX) {
+      e.vx = (e.vx / ESPD) * E_MAX;
+      e.vy = (e.vy / ESPD) * E_MAX;
+    }
+
+    e.x += e.vx * dtSec;
+    e.y += e.vy * dtSec;
+
+    // Wrap
+    if (e.x < -50) e.x = canvas.width + 50;
+    if (e.x > canvas.width + 50) e.x = -50;
+    if (e.y < -50) e.y = canvas.height + 50;
+    if (e.y > canvas.height + 50) e.y = -50;
+
+    // Fire heavy projectile occasionally
+    e.fireCooldown -= dt;
+    if (e.fireCooldown <= 0 && distToPlayer < 900) {
+      fireEnemyBullet(e);
+      e.fireCooldown = 3500 + Math.random() * 2000;  // 3.5-5.5s reload
+    }
+
+    // Check collision with player bullets
+    for (let j = bullets.length - 1; j >= 0; j--) {
+      const b = bullets[j];
+      const bdx = b.x - e.x, bdy = b.y - e.y;
+      if (bdx*bdx + bdy*bdy < (e.radius + 3) * (e.radius + 3)) {
+        bullets.splice(j, 1);
+        e.health--;
+        if (e.health <= 0) {
+          enemies.splice(i, 1);
+          score += 100;
+          scoreEl.textContent = score;
+          break;
+        }
+      }
+    }
+  }
+}
+
+function fireBullet() {
+  const speed = 320;  // slow cannon shell - was 1100, you can see them travel
+  // Bullet originates from the turret tip, in the turret's direction
+  const turretX = player.x;
+  const turretY = player.y - 8;
+  const barrelLen = 14;
+  bullets.push({
+    x: turretX + Math.cos(player.turretAngle) * barrelLen,
+    y: turretY + Math.sin(player.turretAngle) * barrelLen,
+    vx: player.vx + Math.cos(player.turretAngle) * speed,
+    vy: player.vy + Math.sin(player.turretAngle) * speed,
+    life: 4500,  // longer life so they travel far
+    angle: player.turretAngle
+  });
+}
+
+function fireEnemyBullet(e) {
+  const speed = 180;  // slow heavy shell - was 380
+  // Predict player position - longer lead time since shells are slow
+  const leadTime = 1.2;
+  const tx = player.x + player.vx * leadTime;
+  const ty = player.y + player.vy * leadTime;
+  const aimAng = Math.atan2(ty - e.y, tx - e.x);
+  enemyBullets.push({
+    x: e.x + Math.cos(aimAng) * 24,
+    y: e.y + Math.sin(aimAng) * 24,
+    vx: Math.cos(aimAng) * speed,
+    vy: Math.sin(aimAng) * speed,
+    life: 6000,
+    angle: aimAng
+  });
+}
+
+// ============================================================================
+// RENDER
+// ============================================================================
+function render() {
+  const w = canvas.width, h = canvas.height;
+
+  // Deep space background
+  ctx.fillStyle = '#000208';
+  ctx.fillRect(0, 0, w, h);
+
+  // Draw baked Milky Way
+  if (milkyWayCanvas) ctx.drawImage(milkyWayCanvas, 0, 0);
+
+  // Draw twinkling foreground stars
+  drawStars();
+
+  // Player bullets - thin glowing lines
+  drawPlayerBullets();
+
+  // Enemy bullets - heavier orange/red projectiles
+  drawEnemyBullets();
+
+  // Enemies
+  for (const e of enemies) drawEnemy(e);
+
+  // Player ship
+  drawPlayer();
+}
+
+function drawStars() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const s of stars) {
+    s.twinkle += s.twinkleSpeed;
+    const tw = 0.7 + Math.sin(s.twinkle) * 0.3;
+    const brightness = s.brightness * tw;
+    ctx.fillStyle = `hsla(${s.hue}, 70%, 90%, ${brightness})`;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    ctx.fill();
+    // Add a glow for the brightest stars
+    if (s.layer === 2 && brightness > 0.7) {
+      ctx.fillStyle = `hsla(${s.hue}, 70%, 90%, ${brightness * 0.15})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawPlayer() {
+  ctx.save();
+  ctx.translate(player.x, player.y);
+
+  // ============================================
+  // SHIP HULL (fixed orientation - always points up on screen)
+  // ============================================
+  ctx.save();
+  ctx.rotate(player.angle);  // -PI/2 fixed, hull points up
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.beginPath();
+  drawShipPath(2, 2);
+  ctx.fill();
+
+  // Hull (metallic gradient)
+  const hullGrad = ctx.createLinearGradient(0, -10, 0, 10);
+  hullGrad.addColorStop(0, '#dde6f0');
+  hullGrad.addColorStop(0.4, '#a0adbf');
+  hullGrad.addColorStop(0.6, '#7a8595');
+  hullGrad.addColorStop(1, '#3a4350');
+  ctx.fillStyle = hullGrad;
+  ctx.beginPath();
+  drawShipPath(0, 0);
+  ctx.fill();
+
+  // Outline
+  ctx.strokeStyle = 'rgba(200, 220, 255, 0.8)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  drawShipPath(0, 0);
+  ctx.stroke();
+
+  // === Warship deck details ===
+
+  // Bow window/sensor array (forward viewport)
+  ctx.fillStyle = 'rgba(40, 90, 130, 0.85)';
+  ctx.beginPath();
+  ctx.ellipse(13, 0, 2.5, 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(180, 220, 255, 0.4)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Deck panel lines
+  ctx.strokeStyle = 'rgba(40, 50, 65, 0.5)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(-12, 0);
+  ctx.lineTo(10, 0);
+  ctx.moveTo(-7, -8); ctx.lineTo(-7, 8);
+  ctx.moveTo(5, -9); ctx.lineTo(5, 9);
+  ctx.stroke();
+
+  // Side vents
+  ctx.fillStyle = '#1a2030';
+  ctx.fillRect(-5, -9, 4, 1);
+  ctx.fillRect(-5, 8, 4, 1);
+  ctx.fillRect(2, -10, 3, 1);
+  ctx.fillRect(2, 9, 3, 1);
+
+  // Stern ports
+  ctx.fillStyle = '#0a0f18';
+  ctx.fillRect(-14, -3, 1.5, 1.5);
+  ctx.fillRect(-14, 1.5, 1.5, 1.5);
+
+  // Mounting ring (where the thruster turret sits) - rear-center
+  // In ship-local coords: x is forward, y is sideways. We put it at slight rear of center.
+  const mountGrad = ctx.createRadialGradient(-3, 0, 2, -3, 0, 8);
+  mountGrad.addColorStop(0, '#5a6470');
+  mountGrad.addColorStop(0.7, '#3a4350');
+  mountGrad.addColorStop(1, '#2a3038');
+  ctx.fillStyle = mountGrad;
+  ctx.beginPath();
+  ctx.arc(-3, 0, 7.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(150, 170, 200, 0.6)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.arc(-3, 0, 7.5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(-3, 0, 6.8, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Forward turret base ring (where the gun sits)
+  const tBaseGrad = ctx.createRadialGradient(8, 0, 1, 8, 0, 5);
+  tBaseGrad.addColorStop(0, '#4a5260');
+  tBaseGrad.addColorStop(1, '#2a3038');
+  ctx.fillStyle = tBaseGrad;
+  ctx.beginPath();
+  ctx.arc(8, 0, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(150, 170, 200, 0.5)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.arc(8, 0, 4.5, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
+
+  // ============================================
+  // ROTATING THRUSTER COVER (rear-center turret)
+  // ============================================
+  ctx.save();
+  // Since ship.angle is -PI/2 (pointing up), the mounting position on screen
+  // is at the rear of the ship (which is below center since ship points up).
+  // Ship-local rear (-3, 0) rotated by -PI/2 becomes screen (0, -3)... wait let me think.
+  // Rotation by angle: (x', y') = (x*cos - y*sin, x*sin + y*cos)
+  // angle = -PI/2: cos = 0, sin = -1
+  // (-3, 0) -> (-3*0 - 0*(-1), -3*(-1) + 0*0) = (0, 3)
+  // So mounting is at world offset (0, 3) - i.e. below center on screen.
+  // But "rear" of ship pointing up should be DOWN on screen. (0, 3) is down. ✓
+  ctx.translate(0, 3);
+  ctx.rotate(player.thrusterAngle);
+
+  // Flame
+  if (player.throttle > 0.01) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const t = player.throttle;
+    const flicker = 1 + Math.sin(gameTime * 0.05) * 0.15;
+
+    const g1 = ctx.createRadialGradient(8, 0, 0, 8, 0, 28 * t);
+    g1.addColorStop(0, `rgba(255, 200, 100, ${0.9 * t})`);
+    g1.addColorStop(0.5, `rgba(255, 120, 40, ${0.5 * t})`);
+    g1.addColorStop(1, 'rgba(255, 60, 20, 0)');
+    ctx.fillStyle = g1;
+    ctx.beginPath();
+    ctx.moveTo(7, 0);
+    ctx.quadraticCurveTo(14, -8 * flicker * t, 26 * flicker * t, 0);
+    ctx.quadraticCurveTo(14, 8 * flicker * t, 7, 0);
+    ctx.fill();
+
+    ctx.fillStyle = `rgba(180, 220, 255, ${0.95 * t})`;
+    ctx.beginPath();
+    ctx.moveTo(7, 0);
+    ctx.quadraticCurveTo(11, -3 * t, 16 * flicker * t, 0);
+    ctx.quadraticCurveTo(11, 3 * t, 7, 0);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Thruster cover
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.beginPath();
+  ctx.ellipse(1, 1, 6, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const rimGrad = ctx.createRadialGradient(-2, -2, 1, 0, 0, 6.5);
+  rimGrad.addColorStop(0, '#b8c4d4');
+  rimGrad.addColorStop(0.5, '#7a8694');
+  rimGrad.addColorStop(0.85, '#4a5260');
+  rimGrad.addColorStop(1, '#2a3038');
+  ctx.fillStyle = rimGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  const plateGrad = ctx.createRadialGradient(-1.5, -1.5, 0.5, 0, 0, 5);
+  plateGrad.addColorStop(0, '#c8d4e4');
+  plateGrad.addColorStop(0.6, '#8a96a8');
+  plateGrad.addColorStop(1, '#5a6474');
+  ctx.fillStyle = plateGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, 4.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#2a3038';
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * 5.2, Math.sin(a) * 5.2, 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(220, 230, 250, 0.7)';
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * 5.2 - 0.2, Math.sin(a) * 5.2 - 0.2, 0.25, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = '#3a4350';
+  ctx.beginPath();
+  ctx.moveTo(4, -3);
+  ctx.lineTo(8, -2.5);
+  ctx.lineTo(8, 2.5);
+  ctx.lineTo(4, 3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(180, 200, 220, 0.7)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  if (player.throttle > 0.01) {
+    const noz = ctx.createRadialGradient(7, 0, 0, 7, 0, 3);
+    noz.addColorStop(0, `rgba(255, 230, 180, ${player.throttle})`);
+    noz.addColorStop(0.5, `rgba(255, 140, 60, ${player.throttle * 0.8})`);
+    noz.addColorStop(1, 'rgba(100, 30, 10, 0)');
+    ctx.fillStyle = noz;
+    ctx.beginPath();
+    ctx.ellipse(7, 0, 1.5, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = '#0a0d12';
+    ctx.beginPath();
+    ctx.ellipse(7, 0, 1.3, 2.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = 'rgba(60, 70, 85, 0.9)';
+  ctx.fillRect(-1, -1, 5, 2);
+  ctx.fillStyle = 'rgba(180, 200, 220, 0.5)';
+  ctx.fillRect(-1, -1, 5, 0.3);
+
+  const hubGrad = ctx.createRadialGradient(-0.3, -0.3, 0, 0, 0, 1.6);
+  hubGrad.addColorStop(0, '#d8e0ec');
+  hubGrad.addColorStop(1, '#5a6474');
+  ctx.fillStyle = hubGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+
+  // ============================================
+  // GUN TURRET (forward - rotates fast toward mouse)
+  // ============================================
+  // Forward position on screen: ship local (8, 0) rotated by -PI/2 = (0, -8) screen
+  ctx.save();
+  ctx.translate(0, -8);
+  ctx.rotate(player.turretAngle);
+
+  // Turret base shadow
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.beginPath();
+  ctx.ellipse(0.5, 0.5, 4, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Turret dome (small)
+  const turretGrad = ctx.createRadialGradient(-1, -1, 0.3, 0, 0, 4);
+  turretGrad.addColorStop(0, '#d8e2f0');
+  turretGrad.addColorStop(0.5, '#8a96a8');
+  turretGrad.addColorStop(1, '#3a4350');
+  ctx.fillStyle = turretGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, 3.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(200, 220, 255, 0.7)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.arc(0, 0, 3.8, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Cannon barrel (long thin black barrel pointing forward = +X local)
+  // Barrel housing (slightly wider base)
+  ctx.fillStyle = '#2a3038';
+  ctx.fillRect(1, -1.8, 5, 3.6);
+  // Main barrel
+  ctx.fillStyle = '#1a1f28';
+  ctx.fillRect(3, -1.2, 11, 2.4);
+  // Barrel highlight
+  ctx.fillStyle = 'rgba(180, 200, 220, 0.5)';
+  ctx.fillRect(3, -1.2, 11, 0.5);
+  // Barrel tip
+  ctx.fillStyle = '#0a0d12';
+  ctx.fillRect(13, -1.4, 1.5, 2.8);
+  // Muzzle
+  ctx.fillStyle = '#000';
+  ctx.fillRect(14, -0.8, 0.5, 1.6);
+
+  // Small cannon top detail (sight)
+  ctx.fillStyle = '#4a5260';
+  ctx.fillRect(-1, -0.5, 2, 1);
+
+  ctx.restore();
+
+  ctx.restore();
+}
+
+function drawShipPath(ox, oy) {
+  // Oval warship hull - longer than wide, with a slightly pointed bow and squared stern
+  // angle 0 = bow pointing right
+  const cx = ox, cy = oy;
+  ctx.moveTo(cx + 18, cy);                    // bow tip
+  ctx.bezierCurveTo(cx + 17, cy - 5, cx + 14, cy - 9, cx + 8, cy - 10);  // forward upper curve
+  ctx.bezierCurveTo(cx + 2, cy - 10.5, cx - 6, cy - 10, cx - 10, cy - 9); // mid-upper
+  ctx.lineTo(cx - 13, cy - 7);                // upper rear shoulder
+  ctx.lineTo(cx - 14, cy - 4);                // stern upper corner
+  ctx.lineTo(cx - 14, cy + 4);                // stern lower corner
+  ctx.lineTo(cx - 13, cy + 7);                // lower rear shoulder
+  ctx.lineTo(cx - 10, cy + 9);                // mid-lower
+  ctx.bezierCurveTo(cx - 6, cy + 10, cx + 2, cy + 10.5, cx + 8, cy + 10);
+  ctx.bezierCurveTo(cx + 14, cy + 9, cx + 17, cy + 5, cx + 18, cy);
+  ctx.closePath();
+}
+
+function drawEnemy(e) {
+  ctx.save();
+  ctx.translate(e.x, e.y);
+
+  // Thrust flame
+  if (e.thrusting) {
+    ctx.save();
+    ctx.rotate(e.thrustAngle + Math.PI);
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(10, 0, 0, 10, 0, 26);
+    g.addColorStop(0, 'rgba(255, 100, 150, 0.8)');
+    g.addColorStop(0.5, 'rgba(200, 40, 80, 0.4)');
+    g.addColorStop(1, 'rgba(150, 20, 60, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(10, 0);
+    ctx.quadraticCurveTo(18, -10, 28, 0);
+    ctx.quadraticCurveTo(18, 10, 10, 0);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.rotate(e.aimAngle);
+
+  // Heavy enemy ship - more angular and menacing
+  // Shadow
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.beginPath();
+  drawEnemyPath(3, 3);
+  ctx.fill();
+
+  // Hull (dark red metallic)
+  const hullGrad = ctx.createLinearGradient(0, -16, 0, 16);
+  hullGrad.addColorStop(0, '#9a4040');
+  hullGrad.addColorStop(0.4, '#5a1818');
+  hullGrad.addColorStop(0.6, '#3a0a0a');
+  hullGrad.addColorStop(1, '#1a0202');
+  ctx.fillStyle = hullGrad;
+  ctx.beginPath();
+  drawEnemyPath(0, 0);
+  ctx.fill();
+
+  // Outline
+  ctx.strokeStyle = 'rgba(255, 100, 100, 0.6)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  drawEnemyPath(0, 0);
+  ctx.stroke();
+
+  // Central eye/sensor
+  const eyeGrad = ctx.createRadialGradient(2, 0, 0, 2, 0, 7);
+  eyeGrad.addColorStop(0, 'rgba(255, 200, 50, 1)');
+  eyeGrad.addColorStop(0.5, 'rgba(255, 80, 40, 0.9)');
+  eyeGrad.addColorStop(1, 'rgba(150, 20, 20, 0.6)');
+  ctx.fillStyle = eyeGrad;
+  ctx.beginPath();
+  ctx.ellipse(2, 0, 5, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Heavy cannons
+  ctx.fillStyle = '#2a1010';
+  ctx.fillRect(8, -10, 10, 3);
+  ctx.fillRect(8, 7, 10, 3);
+  ctx.strokeStyle = 'rgba(255, 100, 100, 0.4)';
+  ctx.strokeRect(8, -10, 10, 3);
+  ctx.strokeRect(8, 7, 10, 3);
+
+  ctx.restore();
+}
+
+function drawEnemyPath(ox, oy) {
+  // Heavier, wider shape
+  ctx.moveTo(18 + ox, 0 + oy);
+  ctx.lineTo(10 + ox, -8 + oy);
+  ctx.lineTo(8 + ox, -16 + oy);
+  ctx.lineTo(-6 + ox, -18 + oy);
+  ctx.lineTo(-14 + ox, -12 + oy);
+  ctx.lineTo(-16 + ox, -4 + oy);
+  ctx.lineTo(-10 + ox, 0 + oy);
+  ctx.lineTo(-16 + ox, 4 + oy);
+  ctx.lineTo(-14 + ox, 12 + oy);
+  ctx.lineTo(-6 + ox, 18 + oy);
+  ctx.lineTo(8 + ox, 16 + oy);
+  ctx.lineTo(10 + ox, 8 + oy);
+  ctx.closePath();
+}
+
+function drawPlayerBullets() {
+  ctx.save();
+  for (const b of bullets) {
+    // Cannon shell - small glowing metal slug with a faint trail
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // Soft trail behind the shell
+    const trailLen = 18;
+    const tailX = b.x - Math.cos(b.angle) * trailLen;
+    const tailY = b.y - Math.sin(b.angle) * trailLen;
+    const trail = ctx.createLinearGradient(tailX, tailY, b.x, b.y);
+    trail.addColorStop(0, 'rgba(150, 200, 240, 0)');
+    trail.addColorStop(1, 'rgba(200, 230, 255, 0.35)');
+    ctx.strokeStyle = trail;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    // Outer glow halo
+    const glow = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 8);
+    glow.addColorStop(0, 'rgba(200, 230, 255, 0.5)');
+    glow.addColorStop(1, 'rgba(100, 180, 240, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Solid metallic shell body
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(b.angle);
+    // Shell shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(-3.5, -1.8, 7, 3.6);
+    // Shell body (metallic)
+    const shellGrad = ctx.createLinearGradient(0, -2, 0, 2);
+    shellGrad.addColorStop(0, '#d8e2f0');
+    shellGrad.addColorStop(0.5, '#8a96a8');
+    shellGrad.addColorStop(1, '#4a5260');
+    ctx.fillStyle = shellGrad;
+    ctx.fillRect(-3, -1.5, 6, 3);
+    // Nose tip (pointed)
+    ctx.beginPath();
+    ctx.moveTo(3, -1.5);
+    ctx.lineTo(4.5, 0);
+    ctx.lineTo(3, 1.5);
+    ctx.closePath();
+    ctx.fillStyle = '#aeb8ca';
+    ctx.fill();
+    // Tracer glow at the rear
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(255, 240, 200, 0.9)';
+    ctx.beginPath();
+    ctx.arc(-2.5, 0, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawEnemyBullets() {
+  ctx.save();
+  for (const b of enemyBullets) {
+    // Heavy enemy shell - larger, hotter, with a glowing trail
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // Long warm trail
+    const trailLen = 26;
+    const tailX = b.x - Math.cos(b.angle) * trailLen;
+    const tailY = b.y - Math.sin(b.angle) * trailLen;
+    const trail = ctx.createLinearGradient(tailX, tailY, b.x, b.y);
+    trail.addColorStop(0, 'rgba(255, 100, 40, 0)');
+    trail.addColorStop(1, 'rgba(255, 180, 100, 0.5)');
+    ctx.strokeStyle = trail;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+
+    // Outer glow
+    const glow = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 14);
+    glow.addColorStop(0, 'rgba(255, 180, 80, 0.7)');
+    glow.addColorStop(0.5, 'rgba(255, 100, 40, 0.3)');
+    glow.addColorStop(1, 'rgba(180, 30, 20, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Solid shell body
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(b.angle);
+    // Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(-4.5, -2.5, 9, 5);
+    // Body (dark metal)
+    const shellGrad = ctx.createLinearGradient(0, -2.5, 0, 2.5);
+    shellGrad.addColorStop(0, '#a06050');
+    shellGrad.addColorStop(0.5, '#5a2818');
+    shellGrad.addColorStop(1, '#2a1008');
+    ctx.fillStyle = shellGrad;
+    ctx.fillRect(-4, -2, 8, 4);
+    // Pointed nose
+    ctx.beginPath();
+    ctx.moveTo(4, -2);
+    ctx.lineTo(6, 0);
+    ctx.lineTo(4, 2);
+    ctx.closePath();
+    ctx.fillStyle = '#8a4030';
+    ctx.fill();
+    // Hot rear (glowing)
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(255, 220, 150, 0.95)';
+    ctx.beginPath();
+    ctx.arc(-3.5, 0, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ============================================================================
+// MAIN LOOP
+// ============================================================================
+function loop(now) {
+  update(now);
+  render();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
