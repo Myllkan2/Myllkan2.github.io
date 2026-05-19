@@ -294,6 +294,7 @@ const player = {
 const enemies = [];
 const bullets = [];
 const enemyBullets = [];
+const particles = [];   // impact debris, motorgloed, splinter
 
 function spawnPlayer() {
   player.x = canvas.width / 2;
@@ -464,7 +465,27 @@ function update(now) {
     b.life -= dt;
     if (b.life <= 0 || b.x < -50 || b.x > canvas.width + 50 || b.y < -50 || b.y > canvas.height + 50) {
       enemyBullets.splice(i, 1);
+    } else {
+      // Impact paa skroget?
+      const pdx = b.x - player.x, pdy = b.y - player.y;
+      if (pdx*pdx + pdy*pdy < (player.radius + 3) * (player.radius + 3)) {
+        spawnExplosion(b.x, b.y, b.angle);
+        // Knockback: ~15% af projektilets momentum overfoeres til skibet
+        const KNOCKBACK = 0.15;
+        player.vx += b.vx * KNOCKBACK;
+        player.vy += b.vy * KNOCKBACK;
+        enemyBullets.splice(i, 1);
+      }
     }
+  }
+
+  // --- Update particles ---
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dtSec;
+    p.y += p.vy * dtSec;
+    p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
   }
 
   // --- Spawn enemies (max 2 at a time, slow waves) ---
@@ -596,6 +617,42 @@ function fireEnemyBullet(e) {
 }
 
 // ============================================================================
+// IMPACT FX
+// ============================================================================
+function spawnExplosion(x, y, projectileAngle) {
+  // Backsplash: bulk of debris flies opposite to projectile direction (skallen brister bagud)
+  for (let i = 0; i < 14; i++) {
+    const spread = projectileAngle + Math.PI + (Math.random() - 0.5) * 1.6;
+    const speed = 60 + Math.random() * 140;
+    const maxLife = 500 + Math.random() * 200;
+    particles.push({
+      x, y,
+      vx: Math.cos(spread) * speed,
+      vy: Math.sin(spread) * speed,
+      life: maxLife,
+      maxLife,
+      size: 1 + Math.random() * 2.2,
+      hue: 25 + Math.random() * 25
+    });
+  }
+  // Central flash burst: bright short-lived sparks in all directions
+  for (let i = 0; i < 8; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const speed = 20 + Math.random() * 50;
+    const maxLife = 180 + Math.random() * 120;
+    particles.push({
+      x, y,
+      vx: Math.cos(ang) * speed,
+      vy: Math.sin(ang) * speed,
+      life: maxLife,
+      maxLife,
+      size: 2 + Math.random() * 1.5,
+      hue: 48 + Math.random() * 12
+    });
+  }
+}
+
+// ============================================================================
 // RENDER
 // ============================================================================
 function render() {
@@ -622,6 +679,9 @@ function render() {
 
   // Player ship
   drawPlayer();
+
+  // Impact debris (on top so explosions read clearly against the hull)
+  drawParticles();
 }
 
 function drawStars() {
@@ -1144,19 +1204,21 @@ function drawEnemyBullets() {
     // Heavy enemy shell - larger, hotter, with a glowing trail
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    // Long warm trail
-    const trailLen = 26;
-    const tailX = b.x - Math.cos(b.angle) * trailLen;
-    const tailY = b.y - Math.sin(b.angle) * trailLen;
-    const trail = ctx.createLinearGradient(tailX, tailY, b.x, b.y);
-    trail.addColorStop(0, 'rgba(255, 100, 40, 0)');
-    trail.addColorStop(1, 'rgba(255, 180, 100, 0.5)');
-    ctx.strokeStyle = trail;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(tailX, tailY);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
+    // Long warm trail - only while burner is firing
+    if (b.burnerOn) {
+      const trailLen = 26;
+      const tailX = b.x - Math.cos(b.angle) * trailLen;
+      const tailY = b.y - Math.sin(b.angle) * trailLen;
+      const trail = ctx.createLinearGradient(tailX, tailY, b.x, b.y);
+      trail.addColorStop(0, 'rgba(255, 100, 40, 0)');
+      trail.addColorStop(1, 'rgba(255, 180, 100, 0.5)');
+      ctx.strokeStyle = trail;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(tailX, tailY);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
 
     // Outer glow
     const glow = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 14);
@@ -1200,6 +1262,19 @@ function drawEnemyBullets() {
       ctx.fill();
     }
     ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawParticles() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const p of particles) {
+    const alpha = p.life / p.maxLife;
+    ctx.fillStyle = `hsla(${p.hue}, 85%, 65%, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.max(0.5, p.size * alpha), 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.restore();
 }
