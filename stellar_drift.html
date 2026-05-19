@@ -421,6 +421,20 @@ function update(now) {
   // --- Update bullets ---
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
+    if (b.burnerOn) {
+      const dv = b.accel * dtSec;
+      b.vx += Math.cos(b.angle) * dv;
+      b.vy += Math.sin(b.angle) * dv;
+      b.ownSpeed += dv;
+      if (b.ownSpeed >= b.targetSpeed) {
+        // burnout: trim overshoot so rocket coasts at exactly target speed
+        const over = b.ownSpeed - b.targetSpeed;
+        b.vx -= Math.cos(b.angle) * over;
+        b.vy -= Math.sin(b.angle) * over;
+        b.ownSpeed = b.targetSpeed;
+        b.burnerOn = false;
+      }
+    }
     b.x += b.vx * dtSec;
     b.y += b.vy * dtSec;
     b.life -= dt;
@@ -432,6 +446,19 @@ function update(now) {
   // --- Update enemy bullets ---
   for (let i = enemyBullets.length - 1; i >= 0; i--) {
     const b = enemyBullets[i];
+    if (b.burnerOn) {
+      const dv = b.accel * dtSec;
+      b.vx += Math.cos(b.angle) * dv;
+      b.vy += Math.sin(b.angle) * dv;
+      b.ownSpeed += dv;
+      if (b.ownSpeed >= b.targetSpeed) {
+        const over = b.ownSpeed - b.targetSpeed;
+        b.vx -= Math.cos(b.angle) * over;
+        b.vy -= Math.sin(b.angle) * over;
+        b.ownSpeed = b.targetSpeed;
+        b.burnerOn = false;
+      }
+    }
     b.x += b.vx * dtSec;
     b.y += b.vy * dtSec;
     b.life -= dt;
@@ -523,24 +550,33 @@ function update(now) {
 }
 
 function fireBullet() {
-  const speed = 320;  // slow cannon shell - was 1100, you can see them travel
-  // Bullet originates from the turret tip, in the turret's direction
+  // Rocket: starts slow, burns to target speed, then coasts.
+  const TARGET_SPEED = 320;
+  const INITIAL_SPEED = 96;   // 30% of target - burner ignites here
+  const ACCEL = 373;          // px/s^2: reaches target in ~0.6s
   const turretX = player.x;
   const turretY = player.y - 8;
   const barrelLen = 14;
   bullets.push({
     x: turretX + Math.cos(player.turretAngle) * barrelLen,
     y: turretY + Math.sin(player.turretAngle) * barrelLen,
-    vx: player.vx + Math.cos(player.turretAngle) * speed,
-    vy: player.vy + Math.sin(player.turretAngle) * speed,
-    life: 4500,  // longer life so they travel far
-    angle: player.turretAngle
+    vx: player.vx + Math.cos(player.turretAngle) * INITIAL_SPEED,
+    vy: player.vy + Math.sin(player.turretAngle) * INITIAL_SPEED,
+    life: 4500,
+    angle: player.turretAngle,
+    ownSpeed: INITIAL_SPEED,
+    targetSpeed: TARGET_SPEED,
+    accel: ACCEL,
+    burnerOn: true
   });
 }
 
 function fireEnemyBullet(e) {
-  const speed = 108;  // slow heavy shell - was 180 (60%), originally 380
-  // Predict player position - lead time scaled with shell travel time (was 1.2 at speed 180)
+  // Rocket: starts slow, burns to target speed, then coasts.
+  const TARGET_SPEED = 108;
+  const INITIAL_SPEED = 33;   // 30% of target - burner ignites here
+  const ACCEL = 125;          // px/s^2: reaches target in ~0.6s
+  // Predict player position - lead time scaled with shell travel time
   const leadTime = 2.0;
   const tx = player.x + player.vx * leadTime;
   const ty = player.y + player.vy * leadTime;
@@ -548,10 +584,14 @@ function fireEnemyBullet(e) {
   enemyBullets.push({
     x: e.x + Math.cos(aimAng) * 24,
     y: e.y + Math.sin(aimAng) * 24,
-    vx: Math.cos(aimAng) * speed,
-    vy: Math.sin(aimAng) * speed,
-    life: 18000,  // ~tid til at krydse en typisk skaerm ved speed 108
-    angle: aimAng
+    vx: Math.cos(aimAng) * INITIAL_SPEED,
+    vy: Math.sin(aimAng) * INITIAL_SPEED,
+    life: 18000,
+    angle: aimAng,
+    ownSpeed: INITIAL_SPEED,
+    targetSpeed: TARGET_SPEED,
+    accel: ACCEL,
+    burnerOn: true
   });
 }
 
@@ -995,6 +1035,27 @@ function drawEnemyPath(ox, oy) {
 function drawPlayerBullets() {
   ctx.save();
   for (const b of bullets) {
+    // Burner plume (only while rocket motor is firing)
+    if (b.burnerOn) {
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.angle);
+      ctx.globalCompositeOperation = 'lighter';
+      const flicker = 0.85 + Math.sin(gameTime * 0.08 + b.x * 0.1) * 0.15;
+      const plumeLen = 11 * flicker;
+      const flameGrad = ctx.createRadialGradient(-3, 0, 0, -3 - plumeLen * 0.6, 0, plumeLen);
+      flameGrad.addColorStop(0, 'rgba(255, 240, 190, 0.95)');
+      flameGrad.addColorStop(0.4, 'rgba(255, 160, 80, 0.6)');
+      flameGrad.addColorStop(1, 'rgba(255, 60, 20, 0)');
+      ctx.fillStyle = flameGrad;
+      ctx.beginPath();
+      ctx.moveTo(-3, -1.6);
+      ctx.quadraticCurveTo(-3 - plumeLen * 0.5, -1.1, -3 - plumeLen, 0);
+      ctx.quadraticCurveTo(-3 - plumeLen * 0.5, 1.1, -3, 1.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
     // Cannon shell - small glowing metal slug with a faint trail
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -1043,12 +1104,14 @@ function drawPlayerBullets() {
     ctx.closePath();
     ctx.fillStyle = '#aeb8ca';
     ctx.fill();
-    // Tracer glow at the rear
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = 'rgba(255, 240, 200, 0.9)';
-    ctx.beginPath();
-    ctx.arc(-2.5, 0, 1, 0, Math.PI * 2);
-    ctx.fill();
+    // Tracer glow at the rear - only while burner is firing
+    if (b.burnerOn) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(255, 240, 200, 0.9)';
+      ctx.beginPath();
+      ctx.arc(-2.5, 0, 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
   ctx.restore();
@@ -1057,6 +1120,27 @@ function drawPlayerBullets() {
 function drawEnemyBullets() {
   ctx.save();
   for (const b of enemyBullets) {
+    // Burner plume (only while rocket motor is firing)
+    if (b.burnerOn) {
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.angle);
+      ctx.globalCompositeOperation = 'lighter';
+      const flicker = 0.85 + Math.sin(gameTime * 0.07 + b.x * 0.1) * 0.15;
+      const plumeLen = 14 * flicker;
+      const flameGrad = ctx.createRadialGradient(-4, 0, 0, -4 - plumeLen * 0.6, 0, plumeLen);
+      flameGrad.addColorStop(0, 'rgba(255, 210, 130, 0.95)');
+      flameGrad.addColorStop(0.4, 'rgba(255, 110, 50, 0.6)');
+      flameGrad.addColorStop(1, 'rgba(180, 30, 20, 0)');
+      ctx.fillStyle = flameGrad;
+      ctx.beginPath();
+      ctx.moveTo(-4, -2.1);
+      ctx.quadraticCurveTo(-4 - plumeLen * 0.5, -1.4, -4 - plumeLen, 0);
+      ctx.quadraticCurveTo(-4 - plumeLen * 0.5, 1.4, -4, 2.1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
     // Heavy enemy shell - larger, hotter, with a glowing trail
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -1107,12 +1191,14 @@ function drawEnemyBullets() {
     ctx.closePath();
     ctx.fillStyle = '#8a4030';
     ctx.fill();
-    // Hot rear (glowing)
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = 'rgba(255, 220, 150, 0.95)';
-    ctx.beginPath();
-    ctx.arc(-3.5, 0, 1.4, 0, Math.PI * 2);
-    ctx.fill();
+    // Hot rear (glowing) - only while burner is firing
+    if (b.burnerOn) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(255, 220, 150, 0.95)';
+      ctx.beginPath();
+      ctx.arc(-3.5, 0, 1.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
   ctx.restore();
