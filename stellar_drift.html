@@ -295,11 +295,17 @@ const enemies = [];
 const bullets = [];
 const enemyBullets = [];
 const particles = [];   // impact debris, motorgloed, splinter
+const debris = [];      // faste skibsstykker efter destruktion
 
 function spawnPlayer() {
   player.x = canvas.width / 2;
   player.y = canvas.height / 2;
   player.vx = 0; player.vy = 0;
+  player.hits = 0;
+  player.alive = true;
+  player.dying = false;     // 1.5s mellem 10. hit og final explosion
+  player.dyingT = 0;
+  player.damageMarks = [];  // hver: { localX, localY, tier, seed }
 }
 spawnPlayer();
 
@@ -344,6 +350,24 @@ function update(now) {
   gameTime += dt;
   const dtSec = dt / 1000;
 
+  // --- Dying state: 1.5s build-up med voksende flammer, derefter eksplosion ---
+  if (player.dying) {
+    player.dyingT += dt;
+    // Inerti i rummet: skibet driver videre med sin nuvaerende fart under dying.
+    player.x += player.vx * dtSec;
+    player.y += player.vy * dtSec;
+    if (player.x < -20) player.x = canvas.width + 20;
+    if (player.x > canvas.width + 20) player.x = -20;
+    if (player.y < -20) player.y = canvas.height + 20;
+    if (player.y > canvas.height + 20) player.y = -20;
+    if (player.dyingT >= 1500) {
+      player.alive = false;
+      player.dying = false;
+      // Debris arver skibets momentum — skyen driver med samme retning og fart.
+      spawnBigExplosion(player.x, player.y, player.vx, player.vy);
+      spawnShipDebris(player.x, player.y, player.vx, player.vy);
+    }
+  } else if (player.alive) {
   // --- Player aiming: turret rotates fast toward mouse, ship stays fixed ---
   const dx = mouse.x - player.x;
   const dy = mouse.y - player.y;
@@ -418,6 +442,7 @@ function update(now) {
     fireBullet();
     player.fireCooldown = 900;  // ms between shots - classic cannon, ~1 round/sec
   }
+  }  // end: dying / alive dispatch
 
   // --- Update bullets ---
   for (let i = bullets.length - 1; i >= 0; i--) {
@@ -465,7 +490,7 @@ function update(now) {
     b.life -= dt;
     if (b.life <= 0 || b.x < -50 || b.x > canvas.width + 50 || b.y < -50 || b.y > canvas.height + 50) {
       enemyBullets.splice(i, 1);
-    } else {
+    } else if (player.alive) {
       // Impact paa skroget?
       const pdx = b.x - player.x, pdy = b.y - player.y;
       if (pdx*pdx + pdy*pdy < (player.radius + 3) * (player.radius + 3)) {
@@ -474,6 +499,46 @@ function update(now) {
         const KNOCKBACK = 0.15;
         player.vx += b.vx * KNOCKBACK;
         player.vy += b.vy * KNOCKBACK;
+        // Damage: marker i ship-local koordinater. Hullet er fast (angle = -PI/2),
+        // saa local-frame udregning er: localX = -(world dy), localY = world dx.
+        player.hits++;
+        if (player.hits >= 10) {
+          // 10. hit: skibet gaar i dying-fasen. Eksisterende flammer vil vokse,
+          // og vi pumper et par ekstra fire-maerker ud over skroget saa der er
+          // ild flere steder paa kroppen mens den krakelerer.
+          player.dying = true;
+          player.dyingT = 0;
+          const A = 11, B = 5;
+          for (let k = 0; k < 5; k++) {
+            const ang = Math.random() * Math.PI * 2;
+            const rad = 0.45 + Math.random() * 0.5;
+            player.damageMarks.push({
+              localX: Math.cos(ang) * A * rad,
+              localY: Math.sin(ang) * B * rad,
+              tier: 'fire',
+              seed: Math.random()
+            });
+          }
+        } else {
+          let localX = -(b.y - player.y);
+          let localY = b.x - player.x;
+          let tier;
+          if (player.hits <= 5) tier = 'crack';
+          else if (player.hits <= 7) tier = 'flame';
+          else tier = 'fire';
+          // Alle maerker skal sidde paa skroget. Skrog ~32x20, men kollisionsradius
+          // er bredere end skibets smalleste del. Projicer placering ind paa en
+          // intern ellipse (11x5) saa maerket altid lander paa hullet.
+          {
+            const A = 11, B = 5;
+            const r = Math.sqrt((localX / A) * (localX / A) + (localY / B) * (localY / B));
+            if (r > 1) {
+              localX /= r;
+              localY /= r;
+            }
+          }
+          player.damageMarks.push({ localX, localY, tier, seed: Math.random() });
+        }
         enemyBullets.splice(i, 1);
       }
     }
@@ -486,6 +551,16 @@ function update(now) {
     p.y += p.vy * dtSec;
     p.life -= dt;
     if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  // --- Update debris (faste skibsstykker, roterer mens de driver) ---
+  for (let i = debris.length - 1; i >= 0; i--) {
+    const d = debris[i];
+    d.x += d.vx * dtSec;
+    d.y += d.vy * dtSec;
+    d.angle += d.angularVel * dtSec;
+    d.life -= dt;
+    if (d.life <= 0) debris.splice(i, 1);
   }
 
   // --- Spawn enemies (max 2 at a time, slow waves) ---
@@ -619,6 +694,79 @@ function fireEnemyBullet(e) {
 // ============================================================================
 // IMPACT FX
 // ============================================================================
+function spawnShipDebris(x, y, baseVx = 0, baseVy = 0) {
+  // Faste, metalliske skibsstykker — solide chunks der roterer og driver videre.
+  // Lever laengere end gnister fordi de er fysiske dele af skroget.
+  for (let i = 0; i < 14; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const speed = 40 + Math.random() * 180;
+    const maxLife = 1400 + Math.random() * 1200;
+    debris.push({
+      kind: 'chunk',
+      x, y,
+      vx: baseVx + Math.cos(ang) * speed,
+      vy: baseVy + Math.sin(ang) * speed,
+      angle: Math.random() * Math.PI * 2,
+      angularVel: (Math.random() - 0.5) * 9,
+      life: maxLife,
+      maxLife,
+      size: 2 + Math.random() * 3
+    });
+  }
+  // EEN stor genkendelig bid: den forreste tredjedel af skroget (bow med viewport
+  // og forreste turret-base). Langsommere fart og tumble saa den bliver synlig
+  // og laeses som "en del af skibet" gennem hele bevaegelsen.
+  const bigAng = Math.random() * Math.PI * 2;
+  const bigSpeed = 30 + Math.random() * 70;
+  const bigLife = 2400 + Math.random() * 900;
+  debris.push({
+    kind: 'bow',
+    x, y,
+    vx: baseVx + Math.cos(bigAng) * bigSpeed,
+    vy: baseVy + Math.sin(bigAng) * bigSpeed,
+    // Skibet pegede op (angle = -PI/2). Bow-stykket starter i samme orientering.
+    angle: -Math.PI / 2,
+    angularVel: (Math.random() - 0.5) * 3,
+    life: bigLife,
+    maxLife: bigLife
+  });
+}
+
+function spawnBigExplosion(x, y, baseVx = 0, baseVy = 0) {
+  // Skibets endeligt: stor partikel-burst i alle retninger.
+  // baseVx/baseVy: skibets fart paa eksplosionstidspunktet — debris arver den,
+  // saa hele skyen driver videre i samme retning.
+  for (let i = 0; i < 55; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const speed = 60 + Math.random() * 280;
+    const maxLife = 800 + Math.random() * 700;
+    particles.push({
+      x, y,
+      vx: baseVx + Math.cos(ang) * speed,
+      vy: baseVy + Math.sin(ang) * speed,
+      life: maxLife,
+      maxLife,
+      size: 1.5 + Math.random() * 3,
+      hue: 20 + Math.random() * 35
+    });
+  }
+  // Lyse korn i midten
+  for (let i = 0; i < 22; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const speed = 20 + Math.random() * 100;
+    const maxLife = 280 + Math.random() * 220;
+    particles.push({
+      x, y,
+      vx: baseVx + Math.cos(ang) * speed,
+      vy: baseVy + Math.sin(ang) * speed,
+      life: maxLife,
+      maxLife,
+      size: 3 + Math.random() * 2,
+      hue: 55 + Math.random() * 10
+    });
+  }
+}
+
 function spawnExplosion(x, y, projectileAngle) {
   // Backsplash: bulk of debris flies opposite to projectile direction (skallen brister bagud)
   for (let i = 0; i < 14; i++) {
@@ -680,6 +828,9 @@ function render() {
   // Player ship
   drawPlayer();
 
+  // Ship debris (faste stykker) under gnisterne saa de roterer i forgrunden
+  drawDebris();
+
   // Impact debris (on top so explosions read clearly against the hull)
   drawParticles();
 }
@@ -706,7 +857,71 @@ function drawStars() {
   ctx.restore();
 }
 
+function drawDamageMarks() {
+  // Kaldes inde i ship-local frame (efter ctx.rotate(player.angle)).
+  // Under dying-fasen vokser flammerne fra 1x op til ~3.5x i loebet af 1.5s.
+  const deathBoom = player.dying ? Math.min(1, player.dyingT / 1500) : 0;
+  for (const m of player.damageMarks) {
+    if (m.tier === 'crack') {
+      ctx.save();
+      ctx.translate(m.localX, m.localY);
+      ctx.rotate(m.seed * Math.PI * 2);
+      ctx.strokeStyle = 'rgba(12, 8, 10, 0.95)';
+      ctx.lineWidth = 1.1;
+      ctx.lineCap = 'round';
+      // Hovedrevne
+      ctx.beginPath();
+      ctx.moveTo(-3, -0.3);
+      ctx.lineTo(-0.6, 0.4);
+      ctx.lineTo(0.8, -0.4);
+      ctx.lineTo(3, 0.3);
+      ctx.stroke();
+      // Lille forgrening
+      ctx.beginPath();
+      ctx.moveTo(-0.6, 0.4);
+      ctx.lineTo(-1.1, 1.7);
+      ctx.stroke();
+      // Lille soed
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      // flame eller fire — samme tegnerutine, forskellig skala.
+      // Under dying vokser flammen op til 3.5x og forbereder eksplosionen.
+      const baseScale = (m.tier === 'fire') ? 1.0 : 0.55;
+      const scale = baseScale * (1 + deathBoom * 2.5);
+      ctx.save();
+      ctx.translate(m.localX, m.localY);
+      ctx.globalCompositeOperation = 'lighter';
+      const t = gameTime * 0.012 + m.seed * 10;
+      const flicker = 0.85 + Math.sin(t) * 0.15 + Math.sin(t * 2.3) * 0.05;
+      const r = 4 * scale * flicker;
+      // Ydre glow
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.6);
+      g.addColorStop(0, `rgba(255, 220, 140, ${0.85 * scale})`);
+      g.addColorStop(0.4, `rgba(255, 130, 50, ${0.55 * scale})`);
+      g.addColorStop(1, 'rgba(200, 40, 20, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 2.6, 0, Math.PI * 2);
+      ctx.fill();
+      // Indre flammekerne (tear-shape, peger mod bow = +X i ship-local = "op" paa skaerm)
+      ctx.fillStyle = `rgba(255, 240, 190, ${0.95 * scale})`;
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.8);
+      ctx.quadraticCurveTo(r * 1.1, -r * 0.2, r * 1.6 * flicker, 0);
+      ctx.quadraticCurveTo(r * 1.1, r * 0.2, 0, r * 0.8);
+      ctx.quadraticCurveTo(-r * 0.4, 0, 0, -r * 0.8);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
 function drawPlayer() {
+  if (!player.alive) return;
   ctx.save();
   ctx.translate(player.x, player.y);
 
@@ -805,6 +1020,9 @@ function drawPlayer() {
   ctx.beginPath();
   ctx.arc(8, 0, 4.5, 0, Math.PI * 2);
   ctx.stroke();
+
+  // Damage marks - cracks, flammer, brand (tegnes paa skroget)
+  drawDamageMarks();
 
   ctx.restore();
 
@@ -1264,6 +1482,132 @@ function drawEnemyBullets() {
     ctx.restore();
   }
   ctx.restore();
+}
+
+function drawShipBowPiece() {
+  // Tegnes inde i debris-stykkets lokale frame (translated + rotated).
+  // Genskaber forreste tredjedel af skroget med viewport og turret-base saa
+  // stykket forbliver genkendeligt som en del af det oprindelige skib.
+  const hullGrad = ctx.createLinearGradient(0, -10, 0, 10);
+  hullGrad.addColorStop(0, '#dde6f0');
+  hullGrad.addColorStop(0.4, '#a0adbf');
+  hullGrad.addColorStop(0.6, '#7a8595');
+  hullGrad.addColorStop(1, '#3a4350');
+  ctx.fillStyle = hullGrad;
+  ctx.beginPath();
+  ctx.moveTo(18, 0);                              // bow tip
+  ctx.bezierCurveTo(17, -5, 14, -9, 8, -10);      // upper forward curve
+  ctx.lineTo(6, -10.5);
+  // Jagged broken edge across the middle
+  ctx.lineTo(7, -6);
+  ctx.lineTo(4, -3);
+  ctx.lineTo(7, 1);
+  ctx.lineTo(4, 5);
+  ctx.lineTo(7, 9);
+  ctx.lineTo(6, 10.5);
+  ctx.lineTo(8, 10);
+  ctx.bezierCurveTo(14, 9, 17, 5, 18, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(200, 220, 255, 0.8)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Bow viewport
+  ctx.fillStyle = 'rgba(40, 90, 130, 0.85)';
+  ctx.beginPath();
+  ctx.ellipse(13, 0, 2.5, 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(180, 220, 255, 0.4)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Forward turret base ring (selve turret er vaek; kun ringen sidder tilbage)
+  const tBaseGrad = ctx.createRadialGradient(8, 0, 1, 8, 0, 5);
+  tBaseGrad.addColorStop(0, '#4a5260');
+  tBaseGrad.addColorStop(1, '#2a3038');
+  ctx.fillStyle = tBaseGrad;
+  ctx.beginPath();
+  ctx.arc(8, 0, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(150, 170, 200, 0.5)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.arc(8, 0, 4.5, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Soden/skader langs broken edge for at sige "den her er flaaet af"
+  ctx.fillStyle = 'rgba(15, 10, 12, 0.85)';
+  ctx.beginPath();
+  ctx.arc(5, -2, 1.2, 0, Math.PI * 2);
+  ctx.arc(4.5, 3, 1.4, 0, Math.PI * 2);
+  ctx.arc(5.5, 7, 1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Brandende stykke: 3 flammer paa skroget. Symmetriske (ikke retningsbestemte)
+  // saa de ser rigtige ud mens stykket tumler.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const ft = gameTime * 0.012;
+  const spots = [
+    { x: 5,  y: 0,  r: 5.5, phase: 0   },  // stor flamme ved broken edge
+    { x: 11, y: -5, r: 3,   phase: 1.7 },  // mindre flamme over
+    { x: 9,  y: 6,  r: 3.5, phase: 3.3 }   // mindre flamme under
+  ];
+  for (const s of spots) {
+    const flicker = 0.85 + Math.sin(ft + s.phase) * 0.15 + Math.sin(ft * 2.3 + s.phase) * 0.05;
+    const r = s.r * flicker;
+    const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r * 2.6);
+    g.addColorStop(0, 'rgba(255, 220, 140, 0.85)');
+    g.addColorStop(0.4, 'rgba(255, 130, 50, 0.55)');
+    g.addColorStop(1, 'rgba(200, 40, 20, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, r * 2.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 240, 190, 0.95)';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, r * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawDebris() {
+  for (const d of debris) {
+    const alpha = Math.min(1, d.life / 500);  // fade i sidste halve sekund
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.rotate(d.angle);
+    ctx.globalAlpha = alpha;
+    if (d.kind === 'bow') {
+      drawShipBowPiece();
+    } else {
+      const s = d.size;
+      // Metallisk chunk - uregelmaessig firekant der ligner skroget
+      ctx.fillStyle = '#8a96a8';
+      ctx.strokeStyle = 'rgba(200, 220, 240, 0.8)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(-s, -s * 0.6);
+      ctx.lineTo(s * 0.9, -s * 0.8);
+      ctx.lineTo(s, s * 0.5);
+      ctx.lineTo(-s * 0.4, s);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // Skygget side for dybde
+      ctx.globalAlpha = alpha * 0.6;
+      ctx.fillStyle = '#3a4350';
+      ctx.beginPath();
+      ctx.moveTo(s * 0.9, -s * 0.8);
+      ctx.lineTo(s, s * 0.5);
+      ctx.lineTo(0, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 }
 
 function drawParticles() {
