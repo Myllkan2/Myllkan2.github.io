@@ -92,8 +92,8 @@
 </div>
 
 <div id="controls">
-  <kbd>←</kbd><kbd>→</kbd> ROTATE THRUSTER &nbsp;·&nbsp;
-  <kbd>↑</kbd> IGNITE &nbsp;·&nbsp;
+  <kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> ROTATE THRUSTER &nbsp;·&nbsp;
+  <kbd>W</kbd> / <kbd>↑</kbd> IGNITE &nbsp;·&nbsp;
   <kbd>MOUSE</kbd> AIM &nbsp;·&nbsp;
   <kbd>LMB</kbd> FIRE
 </div>
@@ -365,13 +365,13 @@ function update(now) {
   // Left/Right arrows rotate the thruster disc directly.
   // Up arrow ignites the engine (thrust opposite to disc orientation).
   const ROTATE_SPEED = 4.16;  // radians/sec - was 3.2, +30%
-  if (keys['ArrowLeft'])  player.thrusterAngle -= ROTATE_SPEED * dtSec;
-  if (keys['ArrowRight']) player.thrusterAngle += ROTATE_SPEED * dtSec;
+  if (keys['ArrowLeft']  || keys['KeyA']) player.thrusterAngle -= ROTATE_SPEED * dtSec;
+  if (keys['ArrowRight'] || keys['KeyD']) player.thrusterAngle += ROTATE_SPEED * dtSec;
   // Normalize
   while (player.thrusterAngle > Math.PI) player.thrusterAngle -= Math.PI * 2;
   while (player.thrusterAngle < -Math.PI) player.thrusterAngle += Math.PI * 2;
 
-  player.hasInput = !!keys['ArrowUp'];
+  player.hasInput = !!(keys['ArrowUp'] || keys['KeyW']);
 
   // Throttle ramps up while ArrowUp is held, down when released
   const throttleTarget = player.hasInput ? 1 : 0;
@@ -539,9 +539,9 @@ function fireBullet() {
 }
 
 function fireEnemyBullet(e) {
-  const speed = 180;  // slow heavy shell - was 380
-  // Predict player position - longer lead time since shells are slow
-  const leadTime = 1.2;
+  const speed = 108;  // slow heavy shell - was 180 (60%), originally 380
+  // Predict player position - lead time scaled with shell travel time (was 1.2 at speed 180)
+  const leadTime = 2.0;
   const tx = player.x + player.vx * leadTime;
   const ty = player.y + player.vy * leadTime;
   const aimAng = Math.atan2(ty - e.y, tx - e.x);
@@ -550,7 +550,7 @@ function fireEnemyBullet(e) {
     y: e.y + Math.sin(aimAng) * 24,
     vx: Math.cos(aimAng) * speed,
     vy: Math.sin(aimAng) * speed,
-    life: 6000,
+    life: 18000,  // ~tid til at krydse en typisk skaerm ved speed 108
     angle: aimAng
   });
 }
