@@ -7,8 +7,8 @@ Top-down space combat. Ét HTML-dokument, intet build, intet framework. Åbnes d
 ### En fil, ingen afhængigheder
 Hele spillet bor i én `.html`-fil — inline CSS, inline JS, Canvas 2D. Ingen `npm`, ingen bundler, ingen assets på disk. Stjerner, skibe, projektiler — alt tegnes procedurelt med `ctx`. Hvis noget kræver en ekstern fil, har vi taget et forkert valg.
 
-### Faseopdelt udvikling
-Filnavnet siger det selv: `4stellar_drift_phase1.html`. Hver fase er sit eget dokument. Vi bygger oven på den foregående fase ved at kopiere filen, ikke ved at versionsstyre den. Phase 1 = Core (skib, fjende, kanon, baggrund). Senere faser tilføjer mekanikker uden at rive det færdige fundament ned.
+### Faseopdelt udvikling via git-branches
+Spillet bygges i faser. `main` indeholder altid den seneste *færdige* fase. Nyt arbejde foregår på en branch — typisk `phase-2`, `phase-3` osv. Når fasen er færdig, merges den ind i `main` og tagges (`phase-2`, `phase-3`, ...). Phase 1 = Core (skib, fjende, kanon, baggrund) er tagged som `phase-1` i historikken. Senere faser tilføjer mekanikker uden at rive det færdige fundament ned.
 
 ### Kapitalskib-feel, ikke arcade
 Tingene er *langsomme med vilje*. Accelerationen er 60 px/s², topfart 220, kanonen genlader på ~900 ms, projektiler flyver i 320 px/s så man kan *se* dem rejse. Spilleren skal mærke at de styrer noget tungt. Når noget føles for hurtigt, sænk det — referencen er flåde, ikke jagerfly. Kommentarer som `// was 1100, you can see them travel` er bevidste — de fortæller hvorfor en værdi blev valgt.
@@ -31,8 +31,28 @@ Koden indeholder forklarende kommentarer ved ikke-trivielle valg: hvorfor en kon
 
 ## Filer
 
-- `4stellar_drift_phase1.html` — Phase 1: Core. Spilbart fundament.
+- `stellar_drift.html` — selve spillet. Én fil, hele tiden.
+- `CLAUDE.md` — dette dokument.
+- `.gitignore` — hvad git skal ignorere.
 
 ## Kørsel
 
-Åbn `.html`-filen i en moderne browser. Det er det.
+Åbn `stellar_drift.html` i en moderne browser. Det er det.
+
+## Git-workflow (kort)
+
+```
+git status                       # hvor er jeg, hvad er ændret?
+git log --oneline --decorate     # historik, tags og branches
+git checkout -b phase-2          # start ny fase fra nuværende branch
+git add stellar_drift.html       # markér ændringer til næste commit
+git commit -m "..."              # gem snapshot
+git checkout main                # tilbage til hovedlinjen
+git merge phase-2                # flet færdig fase ind
+git tag phase-2                  # markér milestone
+```
+
+Tommelfingerregler:
+- Commit ofte, små skridt. Commits er gratis.
+- `main` skal altid være spilbar. Eksperimenter sker på branches.
+- Hver afsluttet fase får et tag (`phase-N`), så vi altid kan hoppe tilbage.
