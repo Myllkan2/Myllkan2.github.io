@@ -1152,6 +1152,11 @@ function update(now) {
         }
       }
     }
+
+    // Ship-vs-player kollision (kun hvis ingen af parterne er ved at doe)
+    if (player.alive && !player.dying && !e.dying) {
+      handleShipCollision(e);
+    }
   }
 }
 
@@ -1205,6 +1210,139 @@ function fireEnemyBullet(e) {
 // ============================================================================
 // IMPACT FX
 // ============================================================================
+// ============================================================================
+// SHIP-VS-SHIP COLLISION
+// ============================================================================
+// Helpere der applikerer 1 hit paa player/fjende paa contact-normalens position.
+// Tier-logikken (crack -> flame/fire -> die) genbruges fra de eksisterende
+// damage-systemer ved at kalde dette flere gange (1, 2 eller 3 gange afhaengig
+// af relativ hastighed ved kollision).
+
+function applyPlayerHit(worldNormalX, worldNormalY) {
+  // worldNormalX/Y: enhedsvektor fra fjendens center mod spillerens center
+  // (dvs. peger BORT fra contact point). Contact paa spillerens hull er i
+  // modsat retning, ind ad skroget.
+  player.hits++;
+  if (player.hits >= 10) {
+    player.dying = true;
+    player.dyingT = 0;
+    const A = 11, B = 5;
+    for (let k = 0; k < 5; k++) {
+      const ang = Math.random() * Math.PI * 2;
+      const rad = 0.45 + Math.random() * 0.5;
+      player.damageMarks.push({
+        localX: Math.cos(ang) * A * rad,
+        localY: Math.sin(ang) * B * rad,
+        tier: 'fire',
+        seed: Math.random()
+      });
+    }
+    return;
+  }
+  // Contact i ship-local frame. Player hull er fast (angle=-PI/2):
+  //   world dx = -worldNormalX * radius (contact peger MOD fjenden)
+  //   world dy = -worldNormalY * radius
+  //   localX = -worldDy = worldNormalY * radius
+  //   localY =  worldDx = -worldNormalX * radius
+  let localX = worldNormalY * player.radius;
+  let localY = -worldNormalX * player.radius;
+  const A = 11, B = 5;
+  const r = Math.sqrt((localX / A) * (localX / A) + (localY / B) * (localY / B));
+  if (r > 1) { localX /= r; localY /= r; }
+  let tier;
+  if (player.hits <= 5) tier = 'crack';
+  else if (player.hits <= 7) tier = 'flame';
+  else tier = 'fire';
+  player.damageMarks.push({ localX, localY, tier, seed: Math.random() });
+}
+
+function applyEnemyHit(e, worldNormalX, worldNormalY) {
+  // worldNormalX/Y: enhedsvektor fra fjende mod player. Contact paa fjendens
+  // hull er i modsat retning fra fjenden's center.
+  e.hits++;
+  if (e.hits >= 5) {
+    e.dying = true;
+    e.dyingT = 0;
+    const A = 12, B = 11;
+    for (let k = 0; k < 3; k++) {
+      const ang = Math.random() * Math.PI * 2;
+      const rad = 0.45 + Math.random() * 0.5;
+      e.damageMarks.push({
+        localX: Math.cos(ang) * A * rad,
+        localY: Math.sin(ang) * B * rad,
+        tier: 'fire',
+        seed: Math.random()
+      });
+    }
+    return;
+  }
+  // Ship-local for fjende: inverse rotate (aimAngle) + inverse scale (0.85)
+  const wdx = worldNormalX * e.radius;
+  const wdy = worldNormalY * e.radius;
+  const cosA = Math.cos(e.aimAngle), sinA = Math.sin(e.aimAngle);
+  let localX = (wdx * cosA + wdy * sinA) / 0.85;
+  let localY = (-wdx * sinA + wdy * cosA) / 0.85;
+  const A = 12, B = 11;
+  const r = Math.sqrt((localX / A) * (localX / A) + (localY / B) * (localY / B));
+  if (r > 1) { localX /= r; localY /= r; }
+  const tier = (e.hits <= 2) ? 'crack' : 'fire';
+  e.damageMarks.push({ localX, localY, tier, seed: Math.random() });
+}
+
+function handleShipCollision(e) {
+  const dx = player.x - e.x;
+  const dy = player.y - e.y;
+  const distSq = dx * dx + dy * dy;
+  const minDist = player.radius + e.radius;
+  if (distSq >= minDist * minDist) return;
+  const dist = Math.sqrt(distSq) || 0.001;
+  const nx = dx / dist;   // peger fra fjende mod player
+  const ny = dy / dist;
+  // Relativ hastighed bestemmer skade-tier
+  const rvx = player.vx - e.vx;
+  const rvy = player.vy - e.vy;
+  const relSpeed = Math.sqrt(rvx * rvx + rvy * rvy);
+  let damage, sfxFn;
+  if (relSpeed < 80) {
+    damage = 1;
+    sfxFn = () => sfxRicochet({ volume: 1.2 });
+  } else if (relSpeed < 180) {
+    damage = 2;
+    sfxFn = () => sfxImpactExplosion({ volume: 1.2 });
+  } else {
+    damage = 3;
+    sfxFn = () => sfxImpactExplosion({ volume: 1.6 });   // lidt hoejere ved max
+  }
+  sfxFn();
+  // Visuel feedback ved middel/hoeje kollisioner
+  if (damage >= 2) {
+    const cx = (player.x + e.x) / 2;
+    const cy = (player.y + e.y) / 2;
+    spawnExplosion(cx, cy, Math.atan2(ny, nx));
+  }
+  // Separer skibene saa de ikke overlapper
+  const overlap = (minDist - dist) + 0.5;
+  player.x += nx * overlap * 0.5;
+  player.y += ny * overlap * 0.5;
+  e.x -= nx * overlap * 0.5;
+  e.y -= ny * overlap * 0.5;
+  // Elastisk bounce langs normalen: vend lukkings-komponenten af relativ hastighed
+  const rvDotN = rvx * nx + rvy * ny;
+  if (rvDotN < 0) {
+    const bounce = 1.4;
+    const impulse = -rvDotN * bounce;   // positiv = skubber dem fra hinanden
+    player.vx += nx * impulse * 0.5;
+    player.vy += ny * impulse * 0.5;
+    e.vx -= nx * impulse * 0.5;
+    e.vy -= ny * impulse * 0.5;
+  }
+  // Applikér N hits paa hver
+  for (let k = 0; k < damage; k++) {
+    applyPlayerHit(nx, ny);
+    applyEnemyHit(e, -nx, -ny);
+  }
+}
+
 function spawnEnemyDebris(x, y, baseVx = 0, baseVy = 0, initialAngle = 0) {
   // Som spawnShipDebris men med en enemy-styled bow-fragment.
   for (let i = 0; i < 14; i++) {
