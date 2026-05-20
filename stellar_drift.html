@@ -197,7 +197,7 @@ function stopTrack(el) {
 }
 function playTitleMusic() { playTrack(titleMusicEl); }
 function stopTitleMusic() { stopTrack(titleMusicEl); }
-function playGameMusic()  { playTrack(gameMusicEl);  }
+function playGameMusic()  { gameMusicEl.volume = 0.55; playTrack(gameMusicEl); }
 function stopGameMusic()  { stopTrack(gameMusicEl);  }
 
 // Forsoeg at starte titelmusikken med det samme — fungerer hvis brugeren allerede
@@ -776,6 +776,10 @@ function update(now) {
   // --- Dying state: 1.5s build-up med voksende flammer, derefter eksplosion ---
   if (player.dying) {
     player.dyingT += dt;
+    // Fade gameplay-musikken lineaert ud over dying-fasen (saa den ikke brat
+    // stopper naar den endelige eksplosion fyrer).
+    const fadeProgress = Math.min(1, player.dyingT / 1500);
+    gameMusicEl.volume = 0.55 * (1 - fadeProgress);
     // Inerti i rummet: skibet driver videre med sin nuvaerende fart under dying.
     player.x += player.vx * dtSec;
     player.y += player.vy * dtSec;
@@ -789,6 +793,8 @@ function update(now) {
       // Debris arver skibets momentum — skyen driver med samme retning og fart.
       spawnBigExplosion(player.x, player.y, player.vx, player.vy);
       spawnShipDebris(player.x, player.y, player.vx, player.vy);
+      // SFX 10: stor og hoej eksplosion, synket med den visuelle eksplosion.
+      sfxBigExplosion({ volume: 1.5 });
       // Tag-en CSS-klasse paa for at fade Game Over-overlayet ind (0.5s delay + 1s).
       gameOverEl.classList.add('visible');
       // Skift fra gameplay-musik tilbage til titelmusik.
@@ -945,11 +951,14 @@ function update(now) {
         // Damage: marker i ship-local koordinater. Hullet er fast (angle = -PI/2),
         // saa local-frame udregning er: localX = -(world dy), localY = world dx.
         player.hits++;
-        // SFX 7-10: tier-baseret lyd ved playerns hits
-        if (player.hits >= 10)      sfxBigExplosion({ volume: 1.5 });   // 10: stor og hoej eksplosion
-        else if (player.hits >= 8)  sfxFireExplosion();                 // 8-9: brand-eksplosion
-        else if (player.hits >= 6)  sfxImpactExplosion({ volume: 1.4 }); // 6-7: kollision+eksplosion, hoejere
-        else                        sfxRicochet({ volume: 1.4 });       // 1-5: ricochet, hoejere
+        // SFX 7-9: tier-baseret lyd ved playerns hits. Hit 10 har ingen impact-lyd
+        // — musikken fader i stedet, og SFX 10 (stor eksplosion) spiller 1.5 sek
+        // senere naar dying-fasen kulminerer i den visuelle eksplosion.
+        if (player.hits < 10) {
+          if (player.hits >= 8)       sfxFireExplosion();                 // 8-9: brand-eksplosion
+          else if (player.hits >= 6)  sfxImpactExplosion({ volume: 1.4 }); // 6-7: kollision+eksplosion
+          else                        sfxRicochet({ volume: 1.4 });       // 1-5: ricochet, hoejere
+        }
         if (player.hits >= 10) {
           // 10. hit: skibet gaar i dying-fasen. Eksisterende flammer vil vokse,
           // og vi pumper et par ekstra fire-maerker ud over skroget saa der er
