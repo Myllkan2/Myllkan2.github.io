@@ -74,7 +74,7 @@
     font-size: 14px;
     margin-bottom: 2px;
   }
-  #gameOver {
+  #gameOver, #titleScreen {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     display: flex;
@@ -84,12 +84,15 @@
     background: rgba(0, 0, 8, 0.55);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.25s ease-out;   /* hurtig fade-out ved restart */
+    transition: opacity 0.25s ease-out;   /* hurtig fade-out ved restart/start */
     font-family: -apple-system, 'Segoe UI', sans-serif;
   }
   #gameOver.visible {
     opacity: 1;
     transition: opacity 1s ease-in 0.5s;  /* langsom fade-in efter doed */
+  }
+  #titleScreen.visible {
+    opacity: 1;
   }
   #gameOver .title {
     font-size: 64px;
@@ -99,7 +102,21 @@
     text-shadow: 0 0 30px rgba(255, 60, 60, 0.7), 0 0 60px rgba(180, 30, 30, 0.4);
     margin-bottom: 28px;
   }
-  #gameOver .prompt {
+  #titleScreen .title {
+    font-size: 76px;
+    letter-spacing: 18px;
+    font-weight: 300;
+    color: rgba(220, 235, 255, 0.95);
+    text-shadow: 0 0 40px rgba(150, 200, 255, 0.7), 0 0 80px rgba(80, 140, 220, 0.4);
+    margin-bottom: 14px;
+  }
+  #titleScreen .subtitle {
+    font-size: 13px;
+    letter-spacing: 8px;
+    color: rgba(150, 180, 220, 0.6);
+    margin-bottom: 40px;
+  }
+  #gameOver .prompt, #titleScreen .prompt {
     font-size: 12px;
     letter-spacing: 4px;
     color: rgba(200, 220, 255, 0.7);
@@ -132,10 +149,19 @@
   <kbd>LMB</kbd> FIRE
 </div>
 
+<div id="titleScreen" class="visible">
+  <div class="title">STELLAR DRIFT</div>
+  <div class="subtitle">PHASE 1 · CORE</div>
+  <div class="prompt">PRESS ANY KEY TO START</div>
+</div>
+
 <div id="gameOver">
   <div class="title">GAME OVER</div>
   <div class="prompt">PRESS ANY KEY TO RESTART</div>
 </div>
+
+<audio id="titleMusic" src="title-music.mp4" loop preload="auto"></audio>
+<audio id="gameMusic" src="stellar-drift-beginning.mp3" loop preload="auto"></audio>
 
 <script>
 'use strict';
@@ -149,6 +175,34 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 const gameOverEl = document.getElementById('gameOver');
+const titleEl = document.getElementById('titleScreen');
+const titleMusicEl = document.getElementById('titleMusic');
+const gameMusicEl = document.getElementById('gameMusic');
+titleMusicEl.volume = 0.6;
+gameMusicEl.volume = 0.55;
+
+// Title-state og musik-helpere
+let titleVisible = true;
+
+function playTrack(el) {
+  el.currentTime = 0;
+  // play() returnerer en Promise; browser kan blokere autoplay foer foerste
+  // user-interaktion. Vi swallower failuren stille.
+  const p = el.play();
+  if (p) p.catch(() => {});
+}
+function stopTrack(el) {
+  el.pause();
+  el.currentTime = 0;
+}
+function playTitleMusic() { playTrack(titleMusicEl); }
+function stopTitleMusic() { stopTrack(titleMusicEl); }
+function playGameMusic()  { playTrack(gameMusicEl);  }
+function stopGameMusic()  { stopTrack(gameMusicEl);  }
+
+// Forsoeg at starte titelmusikken med det samme — fungerer hvis brugeren allerede
+// har interageret med siden (fx via hot-reload), ellers spillet ved foerste tast.
+playTitleMusic();
 
 // Resize canvas to fit window (preserve crisp rendering)
 function resize() {
@@ -168,6 +222,12 @@ const mouse = { x: 0, y: 0, down: false };
 
 window.addEventListener('keydown', e => {
   const isMovementKey = ['KeyW','KeyA','KeyS','KeyD','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code);
+  // Titelskaerm: foerste tast unlock'er audio + starter spillet.
+  if (titleVisible) {
+    if (!e.repeat) startGameFromTitle();
+    if (isMovementKey) e.preventDefault();
+    return;
+  }
   // Game over: hvilken som helst tast genstarter. Ignorer auto-repeats saa en
   // tast der holdes nede gennem dødsanimationen ikke triggerer instant restart.
   if (!player.alive) {
@@ -374,6 +434,17 @@ function restartGame() {
   gameTime = 0;
   nextEnemyTime = 3000;
   gameOverEl.classList.remove('visible');
+  stopTitleMusic();
+  playGameMusic();
+}
+
+function startGameFromTitle() {
+  titleVisible = false;
+  titleEl.classList.remove('visible');
+  stopTitleMusic();
+  playGameMusic();
+  // Nulstil dt-akkumulering saa update'en ikke faar en kaempe foerste delta.
+  lastTime = performance.now();
 }
 
 // ============================================================================
@@ -416,6 +487,11 @@ function spawnEnemy() {
 // ============================================================================
 let lastTime = performance.now();
 function update(now) {
+  // Frys spillet mens titelskaerm vises — opdater lastTime saa dt ikke akkumulerer.
+  if (titleVisible) {
+    lastTime = now;
+    return;
+  }
   const dt = Math.min(33, now - lastTime);
   lastTime = now;
   gameTime += dt;
@@ -439,6 +515,9 @@ function update(now) {
       spawnShipDebris(player.x, player.y, player.vx, player.vy);
       // Tag-en CSS-klasse paa for at fade Game Over-overlayet ind (0.5s delay + 1s).
       gameOverEl.classList.add('visible');
+      // Skift fra gameplay-musik tilbage til titelmusik.
+      stopGameMusic();
+      playTitleMusic();
     }
   } else if (player.alive) {
   // --- Player aiming: turret rotates fast toward mouse, ship stays fixed ---
