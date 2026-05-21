@@ -49,8 +49,8 @@
     margin-top: 4px;
   }
   #hud .hull-bar {
-    width: 110px;
-    height: 8px;
+    width: 10px;
+    height: 90px;
     background: rgba(40, 60, 90, 0.4);
     border: 1px solid rgba(120, 150, 200, 0.3);
     position: relative;
@@ -58,18 +58,18 @@
   }
   #hud .hull-fill {
     position: absolute;
-    top: 0; left: 0; bottom: 0;
-    width: 100%;
-    background: linear-gradient(90deg, #5be0a8 0%, #8defb8 100%);
+    left: 0; right: 0; bottom: 0;
+    height: 100%;
+    background: linear-gradient(0deg, #5be0a8 0%, #8defb8 100%);
     box-shadow: 0 0 8px rgba(100, 230, 160, 0.5);
-    transition: width 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+    transition: height 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
   }
   #hud .hull-fill.warn {
-    background: linear-gradient(90deg, #f0c860 0%, #f5d878 100%);
+    background: linear-gradient(0deg, #f0c860 0%, #f5d878 100%);
     box-shadow: 0 0 8px rgba(240, 200, 100, 0.5);
   }
   #hud .hull-fill.crit {
-    background: linear-gradient(90deg, #f06868 0%, #f58888 100%);
+    background: linear-gradient(0deg, #f06868 0%, #f58888 100%);
     box-shadow: 0 0 10px rgba(240, 100, 100, 0.6);
   }
   #hud .hull-pct {
@@ -784,6 +784,82 @@ function sfxFireExplosion({ volume = 1 } = {}) {
   noise.start(); noise.stop(t0 + 0.75);
 }
 
+// --- 11. Machine gun: enkelt MG-skud. Kaldes per skud — den hurtige cadence
+// (~10 skud/sek) skaber stutter-effekten ved sig selv. Tre lag: kropsslag,
+// HF-snap, og kort pitched thunk for at faa "rigtig maskingevaer"-feel.
+function sfxMachineGun({ volume = 1 } = {}) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  const dur = 0.07;
+  // Lag 1: body (band-pass stoej, lavt mid-range thump)
+  const noise1 = ctx.createBufferSource();
+  noise1.buffer = getNoiseBuffer();
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.Q.value = 1.4;
+  bp.frequency.setValueAtTime(380, t0);
+  bp.frequency.exponentialRampToValueAtTime(120, t0 + dur);
+  const g1 = ctx.createGain();
+  g1.gain.setValueAtTime(0, t0);
+  g1.gain.linearRampToValueAtTime(0.55 * volume, t0 + 0.003);
+  g1.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  noise1.connect(bp); bp.connect(g1); g1.connect(getSfxGain());
+  noise1.start(); noise1.stop(t0 + dur + 0.02);
+  // Lag 2: snap (highpass-noise for crack)
+  const noise2 = ctx.createBufferSource();
+  noise2.buffer = getNoiseBuffer();
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 2200;
+  const g2 = ctx.createGain();
+  g2.gain.setValueAtTime(0, t0);
+  g2.gain.linearRampToValueAtTime(0.4 * volume, t0 + 0.002);
+  g2.gain.exponentialRampToValueAtTime(0.001, t0 + 0.025);
+  noise2.connect(hp); hp.connect(g2); g2.connect(getSfxGain());
+  noise2.start(); noise2.stop(t0 + 0.04);
+  // Lag 3: pitched thunk (kort triangle sweep — giver "tonen" af skuddet)
+  const osc = ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(260, t0);
+  osc.frequency.exponentialRampToValueAtTime(80, t0 + dur * 0.8);
+  const g3 = ctx.createGain();
+  g3.gain.setValueAtTime(0, t0);
+  g3.gain.linearRampToValueAtTime(0.32 * volume, t0 + 0.003);
+  g3.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  osc.connect(g3); g3.connect(getSfxGain());
+  osc.start(); osc.stop(t0 + dur + 0.02);
+}
+
+// --- 12. Bullet-vs-metal: MG-kugle rammer fjendens skrog (krak-tier). Skarp,
+// hoejere og kortere end sfxRicochet — mere "ping" end "klong".
+function sfxBulletMetal({ volume = 1 } = {}) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  // Transient: kort HF noise burst (selve anslaget)
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer();
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 3000;
+  const noiseG = ctx.createGain();
+  noiseG.gain.setValueAtTime(0, t0);
+  noiseG.gain.linearRampToValueAtTime(0.55 * volume, t0 + 0.002);
+  noiseG.gain.exponentialRampToValueAtTime(0.001, t0 + 0.035);
+  noise.connect(hp); hp.connect(noiseG); noiseG.connect(getSfxGain());
+  noise.start(); noise.stop(t0 + 0.04);
+  // Metallisk ping (triangle med rapid pitch sweep)
+  const f = 3200 + Math.random() * 500;
+  const osc = ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(f, t0);
+  osc.frequency.exponentialRampToValueAtTime(f * 0.55, t0 + 0.08);
+  const oscG = ctx.createGain();
+  oscG.gain.setValueAtTime(0, t0);
+  oscG.gain.linearRampToValueAtTime(0.26 * volume, t0 + 0.003);
+  oscG.gain.exponentialRampToValueAtTime(0.001, t0 + 0.12);
+  osc.connect(oscG); oscG.connect(getSfxGain());
+  osc.start(); osc.stop(t0 + 0.14);
+}
+
 // Resize canvas to fit window (preserve crisp rendering)
 function resize() {
   const w = window.innerWidth;
@@ -986,6 +1062,10 @@ const SHIP_TYPES = {
 // Hvilket skib spilleren bruger naeste gang en simulation starter. LAUNCH i
 // shoppen overskriver denne med det koebte skib.
 let equippedShip = 'default';
+// Tilsvarende for vaaben: 'default' og 'weapon-rl' bruger den eksisterende
+// raket-mekanik; 'weapon-mg' aktiverer maskingevaer. Trin 4 vil differentiere
+// 'weapon-rl' fra default.
+let equippedWeapon = 'default';
 
 const player = {
   x: 0, y: 0,
@@ -1120,8 +1200,12 @@ shopEl.querySelectorAll('.item').forEach(el => {
 
 shopLaunchBtn.addEventListener('click', () => {
   if (shopLaunchBtn.disabled) return;
-  // Udstyr det koebte skib f0r vi restarter — spawnPlayer laeser equippedShip.
+  // Udstyr det koebte skib + vaaben for vi restarter. Vaabnet prioriteres:
+  // MG > RL > default. (Trin 4 introducerer faktisk weapon-switching hvis man
+  // ejer flere — for nu giver MG en mere markant gameplay-aendring.)
   if (owned.ship) equippedShip = owned.ship;
+  if (owned.weapons.includes('weapon-mg'))      equippedWeapon = 'weapon-mg';
+  else if (owned.weapons.includes('weapon-rl')) equippedWeapon = 'weapon-rl';
   restartGame();   // restartGame rydder shop-state og starter en ny simulation
 });
 
@@ -1129,7 +1213,8 @@ shopLaunchBtn.addEventListener('click', () => {
 // Kaldes ved spawn og efter hvert hit. Farveskift: groen > 60%, gul 30-60%, roed <30%.
 function updateHullHUD() {
   const pct = Math.max(0, 100 * (1 - player.hits / player.maxHits));
-  hullFillEl.style.width = pct + '%';
+  // Vertikal bar: fyld styres med height (bunden er forankret via CSS bottom: 0).
+  hullFillEl.style.height = pct + '%';
   hullPctEl.textContent = Math.round(pct) + '%';
   hullFillEl.classList.toggle('warn', pct <= 60 && pct > 30);
   hullFillEl.classList.toggle('crit', pct <= 30);
@@ -1306,20 +1391,30 @@ function update(now) {
   if (player.y < -20) player.y = canvas.height + 20;
   if (player.y > canvas.height + 20) player.y = -20;
 
-  // --- Firing: 3-skuds burst, derefter reload paa ~900 ms ---
+  // --- Firing ---
+  // Raket: 3-skuds burst med 180ms imellem, derefter 900ms reload.
+  // MG: kontinuerlig fyring, ~90ms imellem skud (ca 11 rps).
   if (player.fireCooldown > 0) player.fireCooldown -= dt;
-  // Magasin fyldes naar reload-cooldown'en er udlobet.
-  if (player.magazine === 0 && player.fireCooldown <= 0) {
-    player.magazine = 3;
-  }
-  if (mouse.down && player.fireCooldown <= 0 && player.magazine > 0) {
-    fireBullet();
-    sfxFire();
-    player.magazine--;
-    if (player.magazine > 0) {
-      player.fireCooldown = 180;   // kort pause inde i burst'en
-    } else {
-      player.fireCooldown = 900;   // reload efter 3. skud
+  if (equippedWeapon === 'weapon-mg') {
+    if (mouse.down && player.fireCooldown <= 0) {
+      fireMGBullet();
+      sfxMachineGun();
+      player.fireCooldown = 90;
+    }
+  } else {
+    // Magasin fyldes naar reload-cooldown'en er udlobet (kun raket).
+    if (player.magazine === 0 && player.fireCooldown <= 0) {
+      player.magazine = 3;
+    }
+    if (mouse.down && player.fireCooldown <= 0 && player.magazine > 0) {
+      fireBullet();
+      sfxFire();
+      player.magazine--;
+      if (player.magazine > 0) {
+        player.fireCooldown = 180;   // kort pause inde i burst'en
+      } else {
+        player.fireCooldown = 900;   // reload efter 3. skud
+      }
     }
   }
   }  // end: dying / alive dispatch
@@ -1552,8 +1647,13 @@ function update(now) {
       const bdx = b.x - e.x, bdy = b.y - e.y;
       if (bdx*bdx + bdy*bdy < (e.radius + 3) * (e.radius + 3)) {
         bullets.splice(j, 1);
-        spawnExplosion(b.x, b.y, b.angle);
-        e.hits++;
+        const isMG = b.kind === 'mg';
+        // MG: lille gnist; raket: fuld impact-explosion
+        if (isMG) spawnSpark(b.x, b.y, b.angle);
+        else      spawnExplosion(b.x, b.y, b.angle);
+        // Damage: raket = 1 hit, MG = 1/3 hit. e.hits er fra nu af en float.
+        const damage = isMG ? (1 / 3) : 1;
+        e.hits += damage;
         // Ship-local hit position: inverse rotate (aimAngle) + inverse scale (0.85)
         const cosA = Math.cos(e.aimAngle), sinA = Math.sin(e.aimAngle);
         let localX = (bdx * cosA + bdy * sinA) / 0.85;
@@ -1562,8 +1662,11 @@ function update(now) {
         const A = 12, B = 11;
         const r = Math.sqrt((localX / A) * (localX / A) + (localY / B) * (localY / B));
         if (r > 1) { localX /= r; localY /= r; }
-        if (e.hits >= 5) {
-          // 5. hit: dying-fasen starter. Tilfoej ekstra fire-maerker for spredning.
+        // Epsilon: 15 * (1/3) er 4.9999... i double precision. Uden tolerance
+        // ville fjenden krave 16 MG-hits i stedet for 15.
+        if (e.hits >= 5 - 1e-9) {
+          // Doedelig akkumulering: dying-fasen starter. Tilfoej ekstra fire-
+          // maerker for spredning af flammer over skroget.
           e.dying = true;
           e.dyingT = 0;
           for (let k = 0; k < 3; k++) {
@@ -1580,11 +1683,20 @@ function update(now) {
           sfxImpactExplosion();
           sfxBurning(e.dyingDuration / 1000);
         } else {
-          const tier = (e.hits <= 2) ? 'crack' : 'fire';
+          const inFireTier = e.hits > 2;   // samme threshold som visuel tier
+          const tier = inFireTier ? 'fire' : 'crack';
           e.damageMarks.push({ localX, localY, tier, seed: Math.random() });
-          // SFX: ricochet ved foerste 2 hits, kollision+eksplosion ved hits 3-4
-          if (e.hits <= 2) sfxRicochet();
-          else sfxImpactExplosion();
+          if (isMG) {
+            // MG-hit: "kugle mod metal" indtil ilden er startet, derefter
+            // mindre fire-eksplosion ved hvert hit (skroget braender, hver
+            // kugle blusser flammerne op).
+            if (inFireTier) sfxFireExplosion({ volume: 0.4 });
+            else            sfxBulletMetal();
+          } else {
+            // Raket: ricochet ved <=2 hits-aekvivalent, ellers impact-eksplosion.
+            if (e.hits <= 2) sfxRicochet();
+            else             sfxImpactExplosion();
+          }
         }
       }
     }
@@ -1605,6 +1717,7 @@ function fireBullet() {
   const turretY = player.y - 8;
   const barrelLen = 14;
   bullets.push({
+    kind: 'rocket',
     x: turretX + Math.cos(player.turretAngle) * barrelLen,
     y: turretY + Math.sin(player.turretAngle) * barrelLen,
     vx: player.vx + Math.cos(player.turretAngle) * INITIAL_SPEED,
@@ -1615,6 +1728,25 @@ function fireBullet() {
     targetSpeed: TARGET_SPEED,
     accel: ACCEL,
     burnerOn: true
+  });
+}
+
+// MG-kugle: konstant fart (3x raket-target = 1344 px/s), ingen burner, lille
+// stoerrelse. Lever kun saa laenge at den kan krydse en skaerm — taler 1/3 hit.
+function fireMGBullet() {
+  const SPEED = 1344;          // 3x raket target speed (448)
+  const turretX = player.x;
+  const turretY = player.y - 8;
+  const barrelLen = 14;
+  bullets.push({
+    kind: 'mg',
+    x: turretX + Math.cos(player.turretAngle) * barrelLen,
+    y: turretY + Math.sin(player.turretAngle) * barrelLen,
+    vx: player.vx + Math.cos(player.turretAngle) * SPEED,
+    vy: player.vy + Math.sin(player.turretAngle) * SPEED,
+    life: 1200,                 // 1.2s — rigeligt til at krydse skaerm ved 1344 px/s
+    angle: player.turretAngle,
+    burnerOn: false             // ingen accel-fase
   });
 }
 
@@ -1886,6 +2018,25 @@ function spawnBigExplosion(x, y, baseVx = 0, baseVy = 0) {
       maxLife,
       size: 3 + Math.random() * 2,
       hue: 55 + Math.random() * 10
+    });
+  }
+}
+
+// Lille MG-impact: en haandfuld gnister, ingen tung explosion. Bruges naar
+// MG-kugler rammer fjender — visuel signatur skal vaere mindre end raket-hit.
+function spawnSpark(x, y, projectileAngle) {
+  for (let i = 0; i < 5; i++) {
+    const spread = projectileAngle + Math.PI + (Math.random() - 0.5) * 1.8;
+    const speed = 40 + Math.random() * 90;
+    const maxLife = 180 + Math.random() * 140;
+    particles.push({
+      x, y,
+      vx: Math.cos(spread) * speed,
+      vy: Math.sin(spread) * speed,
+      life: maxLife,
+      maxLife,
+      size: 0.8 + Math.random() * 1.2,
+      hue: 45 + Math.random() * 15
     });
   }
 }
@@ -2557,6 +2708,38 @@ function drawEnemyPath(ox, oy) {
 function drawPlayerBullets() {
   ctx.save();
   for (const b of bullets) {
+    // MG-tracer: lille glowing dot + kort streak. Ingen flame, ingen shell.
+    if (b.kind === 'mg') {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      // Streak bagud (motion blur)
+      const trailLen = 12;
+      const tailX = b.x - Math.cos(b.angle) * trailLen;
+      const tailY = b.y - Math.sin(b.angle) * trailLen;
+      const trail = ctx.createLinearGradient(tailX, tailY, b.x, b.y);
+      trail.addColorStop(0, 'rgba(255, 220, 130, 0)');
+      trail.addColorStop(1, 'rgba(255, 230, 160, 0.85)');
+      ctx.strokeStyle = trail;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(tailX, tailY);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      // Glow + kerne (lille tracer-prik, ca. 1/4 af raket-stoerrelsen)
+      const glow = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 3);
+      glow.addColorStop(0, 'rgba(255, 240, 200, 0.9)');
+      glow.addColorStop(1, 'rgba(255, 180, 80, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff6c8';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 0.9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      continue;   // skip resten af raket-render-logikken for denne bullet
+    }
     // Burner plume (only while rocket motor is firing)
     if (b.burnerOn) {
       ctx.save();
