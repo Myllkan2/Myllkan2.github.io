@@ -1550,13 +1550,18 @@ function update(now) {
   }
 
   // --- Spawn enemies ---
-  // Hard cap 5, men spawn-chancen falder med antallet saa flyden lander mest paa 2-4.
-  if (gameTime > nextEnemyTime && enemies.length < 5) {
-    const spawnChance = [1.0, 1.0, 0.85, 0.55, 0.20][enemies.length];
-    if (Math.random() < spawnChance) {
-      spawnEnemy();
+  // Boelge-baseret: 3-6 fjender ad gangen, ny boelge naar der er plads (>=3 ledige).
+  // Cap 6 saa skaermen ikke druknes. Hvis der ikke er plads, tjek igen om 2.5s.
+  if (gameTime > nextEnemyTime) {
+    const room = 6 - enemies.length;
+    if (room >= 3) {
+      const waveSize = 3 + Math.floor(Math.random() * 4);  // 3, 4, 5 eller 6
+      const count = Math.min(waveSize, room);
+      for (let k = 0; k < count; k++) spawnEnemy();
+      nextEnemyTime = gameTime + 10000 + Math.random() * 6000;  // 10-16s mellem boelger
+    } else {
+      nextEnemyTime = gameTime + 2500;   // for fyldt — vent kort
     }
-    nextEnemyTime = gameTime + 6000 + Math.random() * 5000;  // 6-11s mellem forsoeg
   }
 
   // --- Enemy AI and movement ---
@@ -1651,8 +1656,9 @@ function update(now) {
         // MG: lille gnist; raket: fuld impact-explosion
         if (isMG) spawnSpark(b.x, b.y, b.angle);
         else      spawnExplosion(b.x, b.y, b.angle);
-        // Damage: raket = 1 hit, MG = 1/3 hit. e.hits er fra nu af en float.
-        const damage = isMG ? (1 / 3) : 1;
+        // Damage: raket = 1 hit, MG = 1/6 hit (30 kugler droeber en fjende).
+        // e.hits er fra nu af en float.
+        const damage = isMG ? (1 / 6) : 1;
         e.hits += damage;
         // Ship-local hit position: inverse rotate (aimAngle) + inverse scale (0.85)
         const cosA = Math.cos(e.aimAngle), sinA = Math.sin(e.aimAngle);
