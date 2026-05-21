@@ -145,7 +145,8 @@
   }
   #phase {
     position: fixed;
-    top: 20px;
+    /* rykket ned for at gøre plads til pilot-portrættet i top-højre */
+    top: 295px;
     right: 20px;
     color: rgba(150, 180, 220, 0.4);
     font-size: 11px;
@@ -157,6 +158,46 @@
     color: rgba(200, 220, 255, 0.7);
     font-size: 14px;
     margin-bottom: 2px;
+  }
+  /* Pilot-portræt — Brian skifter humør efter kampens gang */
+  #portrait {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 140px;
+    pointer-events: none;
+    font-family: 'Segoe UI', sans-serif;
+    text-align: center;
+    text-shadow: 0 0 10px rgba(100, 150, 255, 0.5);
+  }
+  #portrait .label {
+    color: rgba(150, 180, 220, 0.5);
+    font-size: 10px;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+  }
+  #portrait .frame {
+    width: 140px;
+    height: 245px;
+    border: 1px solid rgba(120, 150, 200, 0.35);
+    background: rgba(10, 20, 35, 0.4);
+    box-shadow: 0 0 12px rgba(80, 130, 200, 0.25);
+    overflow: hidden;
+  }
+  #portrait img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* sprite-look — portrætterne er pixel art, ingen blød skalering */
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  #portrait .mood {
+    margin-top: 4px;
+    color: rgba(220, 235, 255, 0.7);
+    font-size: 11px;
+    letter-spacing: 2px;
   }
   #gameOver, #titleScreen, #victory {
     position: fixed;
@@ -428,6 +469,12 @@
   </div>
 </div>
 
+<div id="portrait">
+  <div class="label">PILOT · BRIAN</div>
+  <div class="frame"><img id="portraitImg" src="BrianContent.jpeg" alt="Brian"></div>
+  <div class="mood" id="portraitMood">CONTENT</div>
+</div>
+
 <div id="phase">
   <div class="title">STELLAR DRIFT</div>
   <div>PHASE 1 · CORE</div>
@@ -532,6 +579,52 @@ const hullPctEl = document.getElementById('hullPct');
 const heatBlockEl = document.getElementById('heatBlock');
 const heatFillEl = document.getElementById('heatFill');
 const heatPctEl = document.getElementById('heatPct');
+const portraitImgEl = document.getElementById('portraitImg');
+const portraitMoodEl = document.getElementById('portraitMood');
+
+// Brians humør-stige, fra værst til bedst. Index 5 = CONTENT er default.
+// Mekanikker bag skift kobles paa senere — for nu er det rent kosmetisk state.
+const BRIAN_MOODS = [
+  'Apathy', 'Grief', 'Afraid', 'Angry', 'Antagonistic',
+  'Content', 'StrongInterest', 'Cheerful', 'Enthusiastic', 'Serenity'
+];
+const BRIAN_DEFAULT = 'Content';
+let brianMood = BRIAN_DEFAULT;
+// Preload alle 10 portrætter, saa skift ikke flickerer i kampens hede.
+const brianPortraits = Object.fromEntries(
+  BRIAN_MOODS.map(m => {
+    const img = new Image();
+    img.src = 'Brian' + m + '.jpeg';
+    return [m, img];
+  })
+);
+function setBrianMood(mood) {
+  if (mood === brianMood) return;
+  if (!BRIAN_MOODS.includes(mood)) return;
+  brianMood = mood;
+  portraitImgEl.src = 'Brian' + mood + '.jpeg';
+  portraitMoodEl.textContent = mood.replace(/([A-Z])/g, ' $1').trim().toUpperCase();
+}
+// Kill-streak uden at blive ramt. 3 i traek tvinger Serenity — uanset start-humør.
+// Resettes ved hit og ved respawn. Resettes ogsaa naar streaken trigger Serenity,
+// saa det kraever 3 nye rene kills hvis Brian bliver slaaet ud af Serenity igen.
+let brianCleanKills = 0;
+function brianOnHit() {
+  brianCleanKills = 0;
+  const idx = BRIAN_MOODS.indexOf(brianMood);
+  // Apathy (idx 0) er bunden — kan ikke gaa lavere. Serenity → Enthusiastic via -1 step.
+  if (idx > 0) setBrianMood(BRIAN_MOODS[idx - 1]);
+}
+function brianOnKill() {
+  brianCleanKills++;
+  if (brianCleanKills >= 3) {
+    brianCleanKills = 0;
+    setBrianMood('Serenity');
+    return;
+  }
+  const idx = BRIAN_MOODS.indexOf(brianMood);
+  if (idx < BRIAN_MOODS.length - 1) setBrianMood(BRIAN_MOODS[idx + 1]);
+}
 const titleMusicEl = document.getElementById('titleMusic');
 const gameMusicEl = document.getElementById('gameMusic');
 titleMusicEl.volume = 0.6;
@@ -541,6 +634,10 @@ gameMusicEl.volume = 0.55;
 let titleVisible = true;
 // Victory-state: saettes naar score naar 1000 — fryser gameplay og viser overlay.
 let victoryVisible = false;
+// Simulation vs. post-shop sværhedsgrad. False ved ny session — efter foerste
+// triggerVictory bliver den true og overlever restartGame, saa en spiller der
+// dør efter graduation kommer tilbage paa "rigtigt" niveau, ikke i tutorial.
+let hasGraduated = false;
 // Shop-state (phase 2): fryser gameplay og viser quartermaster-overlay efter graduation.
 let shopVisible = false;
 // Spillerens mønter og ejede items. Nulstilles ved hvert shop-besoeg (placeholder for phase 2 trin 1).
@@ -1177,6 +1274,9 @@ function spawnPlayer() {
   heatBlockEl.classList.toggle('visible', equippedWeapon === 'weapon-mg');
   updateHullHUD();
   updateHeatHUD();
+  // Brian starter altid frisk paa Content ved nyt liv. Streak nulstilles.
+  brianCleanKills = 0;
+  setBrianMood(BRIAN_DEFAULT);
 }
 spawnPlayer();
 
@@ -1191,7 +1291,9 @@ function restartGame() {
   score = 0;
   scoreEl.textContent = 0;
   gameTime = 0;
-  nextEnemyTime = 3000;
+  // Simulation faar ~6s grace foer foerste boelge saa spilleren kan vaenne sig
+  // til kontrollerne. Post-shop kommer angrebene hurtigt — som foer.
+  nextEnemyTime = hasGraduated ? 3000 : 6000;
   gameOverEl.classList.remove('visible');
   victoryEl.classList.remove('visible');
   victoryVisible = false;
@@ -1302,6 +1404,9 @@ function triggerVictory() {
   // Spilleren har bestaaet simulationen — frys gameplay og vis license-overlay.
   victoryVisible = true;
   victoryEl.classList.add('visible');
+  // Markér graduation: alle senere missioner kører paa fuld svaerhedsgrad,
+  // ogsaa hvis spilleren doer og restarter. Overlever restartGame() bevidst.
+  hasGraduated = true;
   stopGameMusic();
   playTitleMusic();
   stopThrust();
@@ -1319,7 +1424,7 @@ function startGameFromTitle() {
 // ============================================================================
 // ENEMY SPAWNING
 // ============================================================================
-let nextEnemyTime = 3000;  // ms after game start
+let nextEnemyTime = 6000;  // ms after game start — simulation faar grace til at laere kontrol
 let gameTime = 0;
 let score = 0;
 
@@ -1573,6 +1678,8 @@ function update(now) {
         // Damage: marker i ship-local koordinater. Hullet er fast (angle = -PI/2),
         // saa local-frame udregning er: localX = -(world dy), localY = world dx.
         player.hits++;
+        // Brian: ét hit = humør én ned. Streak brydes ogsaa selv om humøret er ved bunden.
+        brianOnHit();
         // SFX-tier baseret paa damage-ratio (hits/maxHits) saa adfaerden er
         // identisk paa default-skibet (max 10) og skalerer til tiny ship (max 5).
         // Sidste hit har ingen impact-lyd — musikken fader, og stor eksplosion
@@ -1646,15 +1753,23 @@ function update(now) {
   }
 
   // --- Spawn enemies ---
-  // Boelge-baseret: 3-6 fjender ad gangen, ny boelge naar der er plads (>=3 ledige).
-  // Cap 6 saa skaermen ikke druknes. Hvis der ikke er plads, tjek igen om 2.5s.
+  // Boelge-baseret. Simulation (pre-graduation) er mere blid end post-shop, saa
+  // tutorial-fasen ikke skal vaere lige saa svaer som "rigtig" kamp efter shoppen.
   if (gameTime > nextEnemyTime) {
-    const room = 6 - enemies.length;
-    if (room >= 3) {
-      const waveSize = 3 + Math.floor(Math.random() * 4);  // 3, 4, 5 eller 6
+    const cap = hasGraduated ? 6 : 4;
+    const minRoom = hasGraduated ? 3 : 2;
+    const room = cap - enemies.length;
+    if (room >= minRoom) {
+      // Simulation: 2-3 ad gangen. Post-shop: 3-6.
+      const waveSize = hasGraduated
+        ? 3 + Math.floor(Math.random() * 4)   // 3, 4, 5 eller 6
+        : 2 + Math.floor(Math.random() * 2);  // 2 eller 3
       const count = Math.min(waveSize, room);
       for (let k = 0; k < count; k++) spawnEnemy();
-      nextEnemyTime = gameTime + 10000 + Math.random() * 6000;  // 10-16s mellem boelger
+      // Simulation: 12-18s mellem boelger. Post-shop: 10-16s.
+      nextEnemyTime = hasGraduated
+        ? gameTime + 10000 + Math.random() * 6000
+        : gameTime + 12000 + Math.random() * 6000;
     } else {
       nextEnemyTime = gameTime + 2500;   // for fyldt — vent kort
     }
@@ -1771,6 +1886,8 @@ function update(now) {
           // maerker for spredning af flammer over skroget.
           e.dying = true;
           e.dyingT = 0;
+          // Brian: kill = humør én op. 3 i traek uden hit tvinger Serenity.
+          brianOnKill();
           for (let k = 0; k < 3; k++) {
             const ang = Math.random() * Math.PI * 2;
             const rad = 0.45 + Math.random() * 0.5;

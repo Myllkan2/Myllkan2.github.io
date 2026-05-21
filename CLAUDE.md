@@ -4,8 +4,14 @@ Top-down space combat. Ét HTML-dokument, intet build, intet framework. Åbnes d
 
 ## Filosofi
 
-### En fil, ingen afhængigheder
-Hele spillet bor i én `.html`-fil — inline CSS, inline JS, Canvas 2D. Ingen `npm`, ingen bundler, ingen assets på disk. Stjerner, skibe, projektiler — alt tegnes procedurelt med `ctx`. Hvis noget kræver en ekstern fil, har vi taget et forkert valg.
+### En fil, procedurelt gameplay — portrætter og lyd som undtagelse
+Hele spillets *gameplay* bor i én `.html`-fil — inline CSS, inline JS, Canvas 2D. Ingen `npm`, ingen bundler. Stjerner, skibe, projektiler, eksplosioner — alt tegnes procedurelt med `ctx`. Hvis noget *gameplay-element* kræver en ekstern fil, har vi taget et forkert valg.
+
+Undtagelserne ligger ved siden af `.html`-filen:
+- **Lyd:** `title-music.mp4`, `stellar-drift-beginning.mp3` (kan ikke laves procedurelt med rimelig indsats).
+- **Brian-portrætter:** `Brian<Mood>.jpeg` × 10 (pixel art af pilotens humør, top-højre i HUD'en). Humør-stige fra værst til bedst: `Apathy → Grief → Afraid → Angry → Antagonistic → Content → StrongInterest → Cheerful → Enthusiastic → Serenity`. Default: `Content`. Styres via `setBrianMood(name)` i JS.
+
+Reglen er stadig: nye ting tegnes procedurelt med mindre der er en god grund. Stemningsbåren karakterkunst og musik er gode grunde. Et nyt fjende-skib er det ikke.
 
 ### Faseopdelt udvikling via git-branches
 Spillet bygges i faser. `main` indeholder altid den seneste *færdige* fase. Nyt arbejde foregår på en branch — typisk `phase-2`, `phase-3` osv. Når fasen er færdig, merges den ind i `main` og tagges (`phase-2`, `phase-3`, ...). Phase 1 = Core (skib, fjende, kanon, baggrund) er tagged som `phase-1` i historikken. Senere faser tilføjer mekanikker uden at rive det færdige fundament ned.
