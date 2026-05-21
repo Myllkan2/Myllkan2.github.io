@@ -78,6 +78,53 @@
     font-weight: 300;
     min-width: 42px;
   }
+  /* HEAT-barometer (kun synligt naar MG er udstyret) */
+  #hud .heat-block { margin-top: 14px; display: none; }
+  #hud .heat-block.visible { display: block; }
+  #hud .heat-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  #hud .heat-bar {
+    width: 10px;
+    height: 90px;
+    background: rgba(40, 60, 90, 0.4);
+    border: 1px solid rgba(120, 150, 200, 0.3);
+    position: relative;
+    overflow: hidden;
+  }
+  #hud .heat-fill {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 0%;   /* starter koldt */
+    background: linear-gradient(0deg, #6ec0f0 0%, #a8d8f5 100%);
+    box-shadow: 0 0 8px rgba(120, 200, 240, 0.45);
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+  }
+  #hud .heat-fill.warm {
+    background: linear-gradient(0deg, #f0a040 0%, #f5c878 100%);
+    box-shadow: 0 0 8px rgba(240, 160, 60, 0.55);
+  }
+  #hud .heat-fill.lock {
+    background: linear-gradient(0deg, #f06060 0%, #f58888 100%);
+    box-shadow: 0 0 12px rgba(240, 100, 100, 0.85);
+    animation: heat-pulse 0.5s ease-in-out infinite alternate;
+  }
+  @keyframes heat-pulse {
+    from { box-shadow: 0 0 8px rgba(240, 100, 100, 0.6); }
+    to   { box-shadow: 0 0 16px rgba(240, 100, 100, 1); }
+  }
+  #hud .heat-pct {
+    color: rgba(220, 235, 255, 0.85);
+    font-size: 13px;
+    font-weight: 300;
+    min-width: 42px;
+  }
+  #hud .heat-pct.lock {
+    color: #ff9b8a;
+  }
   #controls {
     position: fixed;
     bottom: 20px;
@@ -372,6 +419,13 @@
       <span class="hull-pct" id="hullPct">100%</span>
     </div>
   </div>
+  <div class="heat-block" id="heatBlock">
+    <div class="label">HEAT</div>
+    <div class="heat-row">
+      <div class="heat-bar"><div class="heat-fill" id="heatFill"></div></div>
+      <span class="heat-pct" id="heatPct">0%</span>
+    </div>
+  </div>
 </div>
 
 <div id="phase">
@@ -475,6 +529,9 @@ const shopLaunchBtn = document.getElementById('shopLaunch');
 const shopLaunchHintEl = document.getElementById('shopLaunchHint');
 const hullFillEl = document.getElementById('hullFill');
 const hullPctEl = document.getElementById('hullPct');
+const heatBlockEl = document.getElementById('heatBlock');
+const heatFillEl = document.getElementById('heatFill');
+const heatPctEl = document.getElementById('heatPct');
 const titleMusicEl = document.getElementById('titleMusic');
 const gameMusicEl = document.getElementById('gameMusic');
 titleMusicEl.volume = 0.6;
@@ -1076,6 +1133,10 @@ const player = {
   scale: 1.0,             // rendering scale (1.0 default, 0.5 tiny ship)
   maxHits: 10,            // hull strength (10 default, 5 tiny ship)
   shipType: 'default',
+  // MG-overheat: heat = 0..1, fuldes paa 3s holdt fyring, koeler hele skalaen
+  // paa 1.5s. overheated = true ved 100%, laeses indtil heat naar 0 igen.
+  heat: 0,
+  overheated: false,
   fireCooldown: 0,
   // Thruster disc - rotates independently
   thrusterAngle: Math.PI / 2,  // initially points down on screen (so thrust is up)
@@ -1110,7 +1171,12 @@ function spawnPlayer() {
   player.throttle = 0;
   player.magazine = 3;       // raketter tilbage i nuvaerende burst
   player.hasInput = false;   // saa thrust-sfx-transitionen genstartes korrekt
+  player.heat = 0;
+  player.overheated = false;
+  // Heat-blokken vises kun naar MG er udstyret.
+  heatBlockEl.classList.toggle('visible', equippedWeapon === 'weapon-mg');
   updateHullHUD();
+  updateHeatHUD();
 }
 spawnPlayer();
 
@@ -1218,6 +1284,18 @@ function updateHullHUD() {
   hullPctEl.textContent = Math.round(pct) + '%';
   hullFillEl.classList.toggle('warn', pct <= 60 && pct > 30);
   hullFillEl.classList.toggle('crit', pct <= 30);
+}
+
+// Heat-barometer (MG): koldt under 60%, varmt 60-99%, locked ved 100%.
+function updateHeatHUD() {
+  const heat = player.heat;
+  const pct = Math.round(heat * 100);
+  heatFillEl.style.height = pct + '%';
+  heatPctEl.textContent = pct + '%';
+  const warm = heat >= 0.6 && !player.overheated;
+  heatFillEl.classList.toggle('warm', warm);
+  heatFillEl.classList.toggle('lock', player.overheated);
+  heatPctEl.classList.toggle('lock', player.overheated);
 }
 
 function triggerVictory() {
@@ -1393,14 +1471,32 @@ function update(now) {
 
   // --- Firing ---
   // Raket: 3-skuds burst med 180ms imellem, derefter 900ms reload.
-  // MG: kontinuerlig fyring, ~90ms imellem skud (ca 11 rps).
+  // MG: kontinuerlig fyring, ~90ms imellem skud (ca 11 rps), med overheat-bar.
   if (player.fireCooldown > 0) player.fireCooldown -= dt;
   if (equippedWeapon === 'weapon-mg') {
-    if (mouse.down && player.fireCooldown <= 0) {
+    // Heat-dynamik: stiger 1/3 per sekund mens man fyrer (fuld paa 3s),
+    // falder 2/3 per sekund naar man ikke fyrer (tom paa 1.5s). Locked ved
+    // 100%, unlocked igen naar heat er nul.
+    const wantFire = mouse.down && !player.overheated;
+    if (wantFire) {
+      player.heat += dtSec / 3;
+      if (player.heat >= 1.0) {
+        player.heat = 1.0;
+        player.overheated = true;
+      }
+    } else {
+      player.heat -= dtSec / 1.5;
+      if (player.heat <= 0) {
+        player.heat = 0;
+        player.overheated = false;
+      }
+    }
+    if (wantFire && player.fireCooldown <= 0) {
       fireMGBullet();
       sfxMachineGun();
       player.fireCooldown = 90;
     }
+    updateHeatHUD();
   } else {
     // Magasin fyldes naar reload-cooldown'en er udlobet (kun raket).
     if (player.magazine === 0 && player.fireCooldown <= 0) {
