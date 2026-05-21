@@ -41,6 +41,43 @@
   }
   #hud .label { color: rgba(150, 180, 220, 0.5); font-size: 10px; letter-spacing: 2px; }
   #hud .value { color: #fff; font-size: 18px; font-weight: 300; }
+  #hud .hull-block { margin-top: 14px; }
+  #hud .hull-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  #hud .hull-bar {
+    width: 110px;
+    height: 8px;
+    background: rgba(40, 60, 90, 0.4);
+    border: 1px solid rgba(120, 150, 200, 0.3);
+    position: relative;
+    overflow: hidden;
+  }
+  #hud .hull-fill {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    width: 100%;
+    background: linear-gradient(90deg, #5be0a8 0%, #8defb8 100%);
+    box-shadow: 0 0 8px rgba(100, 230, 160, 0.5);
+    transition: width 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+  }
+  #hud .hull-fill.warn {
+    background: linear-gradient(90deg, #f0c860 0%, #f5d878 100%);
+    box-shadow: 0 0 8px rgba(240, 200, 100, 0.5);
+  }
+  #hud .hull-fill.crit {
+    background: linear-gradient(90deg, #f06868 0%, #f58888 100%);
+    box-shadow: 0 0 10px rgba(240, 100, 100, 0.6);
+  }
+  #hud .hull-pct {
+    color: rgba(220, 235, 255, 0.85);
+    font-size: 13px;
+    font-weight: 300;
+    min-width: 42px;
+  }
   #controls {
     position: fixed;
     bottom: 20px;
@@ -328,6 +365,13 @@
 <div id="hud">
   <div class="label">SCORE</div>
   <div class="value" id="score">0</div>
+  <div class="hull-block">
+    <div class="label">HULL</div>
+    <div class="hull-row">
+      <div class="hull-bar"><div class="hull-fill" id="hullFill"></div></div>
+      <span class="hull-pct" id="hullPct">100%</span>
+    </div>
+  </div>
 </div>
 
 <div id="phase">
@@ -429,6 +473,8 @@ const shopEl = document.getElementById('shop');
 const coinAmountEl = document.getElementById('coinAmount');
 const shopLaunchBtn = document.getElementById('shopLaunch');
 const shopLaunchHintEl = document.getElementById('shopLaunchHint');
+const hullFillEl = document.getElementById('hullFill');
+const hullPctEl = document.getElementById('hullPct');
 const titleMusicEl = document.getElementById('titleMusic');
 const gameMusicEl = document.getElementById('gameMusic');
 titleMusicEl.volume = 0.6;
@@ -930,12 +976,26 @@ window.addEventListener('resize', () => setTimeout(bakeMilkyWay, 50));
 // ============================================================================
 // GAME OBJECTS
 // ============================================================================
+// Ship-typer: konfiguration som playeren faar tilfoert ved spawn. Default er
+// starterskibet (foer foerste shop-besoeg); 'ship-tiny' kobles paa hvis spilleren
+// har koebt det i quartermaster-shoppen.
+const SHIP_TYPES = {
+  'default':   { scale: 1.0, radius: 14, maxHits: 10 },
+  'ship-tiny': { scale: 0.5, radius: 7,  maxHits: 5  }
+};
+// Hvilket skib spilleren bruger naeste gang en simulation starter. LAUNCH i
+// shoppen overskriver denne med det koebte skib.
+let equippedShip = 'default';
+
 const player = {
   x: 0, y: 0,
   vx: 0, vy: 0,
   angle: -Math.PI / 2,    // ship orientation - FIXED, always points up
   turretAngle: -Math.PI / 2,  // gun turret angle (rotates fast toward mouse)
   radius: 14,
+  scale: 1.0,             // rendering scale (1.0 default, 0.5 tiny ship)
+  maxHits: 10,            // hull strength (10 default, 5 tiny ship)
+  shipType: 'default',
   fireCooldown: 0,
   // Thruster disc - rotates independently
   thrusterAngle: Math.PI / 2,  // initially points down on screen (so thrust is up)
@@ -951,12 +1011,18 @@ const particles = [];   // impact debris, motorgloed, splinter
 const debris = [];      // faste skibsstykker efter destruktion
 
 function spawnPlayer() {
+  // Anvend ship-config baseret paa hvad spilleren har udstyret.
+  const cfg = SHIP_TYPES[equippedShip] || SHIP_TYPES['default'];
+  player.shipType = equippedShip;
+  player.scale = cfg.scale;
+  player.radius = cfg.radius;
+  player.maxHits = cfg.maxHits;
   player.x = canvas.width / 2;
   player.y = canvas.height / 2;
   player.vx = 0; player.vy = 0;
   player.hits = 0;
   player.alive = true;
-  player.dying = false;     // 1.5s mellem 10. hit og final explosion
+  player.dying = false;     // 1.5s mellem sidste hit og final explosion
   player.dyingT = 0;
   player.dyingDuration = 1500;
   player.damageMarks = [];  // hver: { localX, localY, tier, seed }
@@ -964,6 +1030,7 @@ function spawnPlayer() {
   player.throttle = 0;
   player.magazine = 3;       // raketter tilbage i nuvaerende burst
   player.hasInput = false;   // saa thrust-sfx-transitionen genstartes korrekt
+  updateHullHUD();
 }
 spawnPlayer();
 
@@ -1053,8 +1120,20 @@ shopEl.querySelectorAll('.item').forEach(el => {
 
 shopLaunchBtn.addEventListener('click', () => {
   if (shopLaunchBtn.disabled) return;
+  // Udstyr det koebte skib f0r vi restarter — spawnPlayer laeser equippedShip.
+  if (owned.ship) equippedShip = owned.ship;
   restartGame();   // restartGame rydder shop-state og starter en ny simulation
 });
+
+// Opdaterer HULL-barometeret i HUD'en ud fra player.hits / player.maxHits.
+// Kaldes ved spawn og efter hvert hit. Farveskift: groen > 60%, gul 30-60%, roed <30%.
+function updateHullHUD() {
+  const pct = Math.max(0, 100 * (1 - player.hits / player.maxHits));
+  hullFillEl.style.width = pct + '%';
+  hullPctEl.textContent = Math.round(pct) + '%';
+  hullFillEl.classList.toggle('warn', pct <= 60 && pct > 30);
+  hullFillEl.classList.toggle('crit', pct <= 30);
+}
 
 function triggerVictory() {
   // Spilleren har bestaaet simulationen — frys gameplay og vis license-overlay.
@@ -1303,18 +1382,19 @@ function update(now) {
         // Damage: marker i ship-local koordinater. Hullet er fast (angle = -PI/2),
         // saa local-frame udregning er: localX = -(world dy), localY = world dx.
         player.hits++;
-        // SFX 7-9: tier-baseret lyd ved playerns hits. Hit 10 har ingen impact-lyd
-        // — musikken fader i stedet, og SFX 10 (stor eksplosion) spiller 1.5 sek
-        // senere naar dying-fasen kulminerer i den visuelle eksplosion.
-        if (player.hits < 10) {
-          if (player.hits >= 8)       sfxFireExplosion();                 // 8-9: brand-eksplosion
-          else if (player.hits >= 6)  sfxImpactExplosion({ volume: 1.4 }); // 6-7: kollision+eksplosion
-          else                        sfxRicochet({ volume: 1.4 });       // 1-5: ricochet, hoejere
+        // SFX-tier baseret paa damage-ratio (hits/maxHits) saa adfaerden er
+        // identisk paa default-skibet (max 10) og skalerer til tiny ship (max 5).
+        // Sidste hit har ingen impact-lyd — musikken fader, og stor eksplosion
+        // spiller 1.5 sek senere naar dying kulminerer.
+        const ratio = player.hits / player.maxHits;
+        if (player.hits < player.maxHits) {
+          if (ratio >= 0.8)       sfxFireExplosion();                  // svaer skade
+          else if (ratio >= 0.6)  sfxImpactExplosion({ volume: 1.4 }); // middel
+          else                    sfxRicochet({ volume: 1.4 });        // let
         }
-        if (player.hits >= 10) {
-          // 10. hit: skibet gaar i dying-fasen. Eksisterende flammer vil vokse,
-          // og vi pumper et par ekstra fire-maerker ud over skroget saa der er
-          // ild flere steder paa kroppen mens den krakelerer.
+        if (player.hits >= player.maxHits) {
+          // Sidste hit: skibet gaar i dying-fasen. Pump ekstra fire-maerker ud
+          // saa der er ild flere steder paa kroppen mens den krakelerer.
           player.dying = true;
           player.dyingT = 0;
           const A = 11, B = 5;
@@ -1331,10 +1411,11 @@ function update(now) {
         } else {
           let localX = -(b.y - player.y);
           let localY = b.x - player.x;
+          // Visuel tier: crack <= 50%, flame <= 70%, fire derover.
           let tier;
-          if (player.hits <= 5) tier = 'crack';
-          else if (player.hits <= 7) tier = 'flame';
-          else tier = 'fire';
+          if (ratio <= 0.5)      tier = 'crack';
+          else if (ratio <= 0.7) tier = 'flame';
+          else                   tier = 'fire';
           // Alle maerker skal sidde paa skroget. Skrog ~32x20, men kollisionsradius
           // er bredere end skibets smalleste del. Projicer placering ind paa en
           // intern ellipse (11x5) saa maerket altid lander paa hullet.
@@ -1348,6 +1429,7 @@ function update(now) {
           }
           player.damageMarks.push({ localX, localY, tier, seed: Math.random() });
         }
+        updateHullHUD();
         enemyBullets.splice(i, 1);
       }
     }
@@ -1577,7 +1659,7 @@ function applyPlayerHit(worldNormalX, worldNormalY) {
   // (dvs. peger BORT fra contact point). Contact paa spillerens hull er i
   // modsat retning, ind ad skroget.
   player.hits++;
-  if (player.hits >= 10) {
+  if (player.hits >= player.maxHits) {
     player.dying = true;
     player.dyingT = 0;
     const A = 11, B = 5;
@@ -1591,6 +1673,7 @@ function applyPlayerHit(worldNormalX, worldNormalY) {
         seed: Math.random()
       });
     }
+    updateHullHUD();
     return;
   }
   // Contact i ship-local frame. Player hull er fast (angle=-PI/2):
@@ -1603,11 +1686,14 @@ function applyPlayerHit(worldNormalX, worldNormalY) {
   const A = 11, B = 5;
   const r = Math.sqrt((localX / A) * (localX / A) + (localY / B) * (localY / B));
   if (r > 1) { localX /= r; localY /= r; }
+  // Visuel tier baseret paa damage-ratio (samme threshold som bullet-hit).
+  const ratio = player.hits / player.maxHits;
   let tier;
-  if (player.hits <= 5) tier = 'crack';
-  else if (player.hits <= 7) tier = 'flame';
-  else tier = 'fire';
+  if (ratio <= 0.5)      tier = 'crack';
+  else if (ratio <= 0.7) tier = 'flame';
+  else                   tier = 'fire';
   player.damageMarks.push({ localX, localY, tier, seed: Math.random() });
+  updateHullHUD();
 }
 
 function applyEnemyHit(e, worldNormalX, worldNormalY) {
@@ -1962,6 +2048,9 @@ function drawPlayer() {
   if (!player.alive) return;
   ctx.save();
   ctx.translate(player.x, player.y);
+  // Tiny ship er halv stoerrelse — én scale-transform haandterer hull, thruster,
+  // turret, flammer og damage-marks (alle drawn i unscaled local coords).
+  if (player.scale !== 1.0) ctx.scale(player.scale, player.scale);
 
   // ============================================
   // SHIP HULL (fixed orientation - always points up on screen)
