@@ -74,7 +74,7 @@
     font-size: 14px;
     margin-bottom: 2px;
   }
-  #gameOver, #titleScreen {
+  #gameOver, #titleScreen, #victory {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     display: flex;
@@ -93,6 +93,10 @@
   }
   #titleScreen.visible {
     opacity: 1;
+  }
+  #victory.visible {
+    opacity: 1;
+    transition: opacity 1.2s ease-in 0.2s;  /* roligt fade-in efter sejr */
   }
   #gameOver .title {
     font-size: 64px;
@@ -114,7 +118,49 @@
     font-size: 13px;
     letter-spacing: 8px;
     color: rgba(150, 180, 220, 0.6);
+    margin-bottom: 28px;
+  }
+  #titleScreen .briefing {
+    font-size: 15px;
+    letter-spacing: 1.5px;
+    line-height: 1.7;
+    color: rgba(210, 225, 245, 0.82);
+    max-width: 680px;
+    text-align: center;
+    margin-bottom: 36px;
+    padding: 0 40px;
+    text-shadow: 0 0 10px rgba(80, 130, 200, 0.25);
+  }
+  #titleScreen .briefing strong {
+    color: rgba(180, 220, 255, 0.95);
+    font-weight: 400;
+    letter-spacing: 2px;
+  }
+  #victory .title {
+    font-size: 56px;
+    letter-spacing: 12px;
+    font-weight: 300;
+    color: rgba(170, 255, 200, 0.95);
+    text-shadow: 0 0 30px rgba(110, 240, 170, 0.7), 0 0 70px rgba(40, 180, 100, 0.4);
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  #victory .message {
+    font-size: 16px;
+    letter-spacing: 2px;
+    line-height: 1.7;
+    color: rgba(220, 240, 230, 0.88);
+    max-width: 700px;
+    text-align: center;
     margin-bottom: 40px;
+    padding: 0 40px;
+    text-shadow: 0 0 12px rgba(80, 200, 140, 0.25);
+  }
+  #victory .prompt {
+    font-size: 12px;
+    letter-spacing: 4px;
+    color: rgba(200, 220, 255, 0.7);
+    animation: gov-blink 1.5s ease-in-out infinite;
   }
   #gameOver .prompt, #titleScreen .prompt {
     font-size: 12px;
@@ -151,13 +197,27 @@
 
 <div id="titleScreen" class="visible">
   <div class="title">STELLAR DRIFT</div>
-  <div class="subtitle">PHASE 1 · CORE</div>
+  <div class="subtitle">SPACE ACADEMY · SIMULATION</div>
+  <div class="briefing">
+    Welcome to the <strong>Space Academy Simulation</strong>.<br><br>
+    For you to get license to own a spacecraft with weapons, you need to pass this simulation. Get used to the control mechanisms, the steering rocket as well as the rocket weaponry.<br><br>
+    You pass if you can get <strong>1000 points</strong> without exploding.<br><br>
+    Good Luck!
+  </div>
   <div class="prompt">PRESS ANY KEY TO START</div>
 </div>
 
 <div id="gameOver">
   <div class="title">GAME OVER</div>
   <div class="prompt">PRESS ANY KEY TO RESTART</div>
+</div>
+
+<div id="victory">
+  <div class="title">LICENSE GRANTED</div>
+  <div class="message">
+    Congratulations! You have now earned license to flying a weaponized spacecraft of small type.
+  </div>
+  <div class="prompt">PRESS ANY KEY TO CONTINUE</div>
 </div>
 
 <audio id="titleMusic" src="title-music.mp4" loop preload="auto"></audio>
@@ -176,6 +236,7 @@ const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 const gameOverEl = document.getElementById('gameOver');
 const titleEl = document.getElementById('titleScreen');
+const victoryEl = document.getElementById('victory');
 const titleMusicEl = document.getElementById('titleMusic');
 const gameMusicEl = document.getElementById('gameMusic');
 titleMusicEl.volume = 0.6;
@@ -183,6 +244,8 @@ gameMusicEl.volume = 0.55;
 
 // Title-state og musik-helpere
 let titleVisible = true;
+// Victory-state: saettes naar score naar 1000 — fryser gameplay og viser overlay.
+let victoryVisible = false;
 
 function playTrack(el) {
   el.currentTime = 0;
@@ -502,6 +565,12 @@ window.addEventListener('keydown', e => {
     if (isMovementKey) e.preventDefault();
     return;
   }
+  // Victory: enhver tast tager spilleren tilbage til en ny simulation.
+  if (victoryVisible) {
+    if (!e.repeat) restartGame();
+    if (isMovementKey) e.preventDefault();
+    return;
+  }
   // Game over: hvilken som helst tast genstarter. Ignorer auto-repeats saa en
   // tast der holdes nede gennem dødsanimationen ikke triggerer instant restart.
   if (!player.alive) {
@@ -709,9 +778,20 @@ function restartGame() {
   gameTime = 0;
   nextEnemyTime = 3000;
   gameOverEl.classList.remove('visible');
+  victoryEl.classList.remove('visible');
+  victoryVisible = false;
   stopTitleMusic();
   playGameMusic();
   stopThrust();   // defensiv: ingen lingering thrust efter restart
+}
+
+function triggerVictory() {
+  // Spilleren har bestaaet simulationen — frys gameplay og vis license-overlay.
+  victoryVisible = true;
+  victoryEl.classList.add('visible');
+  stopGameMusic();
+  playTitleMusic();
+  stopThrust();
 }
 
 function startGameFromTitle() {
@@ -763,8 +843,9 @@ function spawnEnemy() {
 // ============================================================================
 let lastTime = performance.now();
 function update(now) {
-  // Frys spillet mens titelskaerm vises — opdater lastTime saa dt ikke akkumulerer.
-  if (titleVisible) {
+  // Frys spillet mens titelskaerm eller victory-overlay vises — opdater lastTime
+  // saa dt ikke akkumulerer under pause.
+  if (titleVisible || victoryVisible) {
     lastTime = now;
     return;
   }
@@ -1045,6 +1126,8 @@ function update(now) {
         score += 100;
         scoreEl.textContent = score;
         enemies.splice(i, 1);
+        // 1000 point = simulationen bestaaet. Kun en gang pr. liv.
+        if (!victoryVisible && score >= 1000) triggerVictory();
         continue;
       }
       e.x += e.vx * dtSec;
