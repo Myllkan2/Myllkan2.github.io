@@ -162,6 +162,153 @@
     color: rgba(200, 220, 255, 0.7);
     animation: gov-blink 1.5s ease-in-out infinite;
   }
+  /* ===== SHOP / QUARTERMASTER (phase 2) ===== */
+  #shop {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 50px 40px 40px;
+    background: rgba(0, 0, 12, 0.88);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease-out;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+  }
+  #shop.visible {
+    opacity: 1;
+    pointer-events: auto;   /* nu kan man klikke paa items + launch-knappen */
+  }
+  #shop .coin-counter {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 34px;
+    font-weight: 300;
+    color: #ffe27a;
+    letter-spacing: 3px;
+    text-shadow: 0 0 20px rgba(230, 183, 64, 0.55);
+    margin-bottom: 36px;
+  }
+  #shop .coin-icon {
+    filter: drop-shadow(0 0 10px rgba(255, 210, 100, 0.55));
+  }
+  #shop .shop-title {
+    font-size: 38px;
+    letter-spacing: 14px;
+    font-weight: 300;
+    color: rgba(220, 235, 255, 0.92);
+    text-shadow: 0 0 22px rgba(150, 200, 255, 0.45);
+    margin-bottom: 6px;
+  }
+  #shop .shop-subtitle {
+    font-size: 11px;
+    letter-spacing: 7px;
+    color: rgba(160, 190, 220, 0.5);
+    margin-bottom: 42px;
+  }
+  #shop .shop-categories {
+    display: flex;
+    gap: 70px;
+    margin-bottom: 44px;
+  }
+  #shop .category {
+    min-width: 290px;
+  }
+  #shop .category-title {
+    font-size: 12px;
+    letter-spacing: 6px;
+    color: rgba(180, 210, 240, 0.55);
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(120, 150, 200, 0.18);
+  }
+  #shop .item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    border: 1px solid rgba(120, 150, 200, 0.22);
+    background: rgba(20, 30, 50, 0.45);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    user-select: none;
+  }
+  #shop .item:hover:not(.owned):not(.unaffordable) {
+    background: rgba(40, 80, 130, 0.55);
+    border-color: rgba(180, 220, 255, 0.55);
+    transform: translateY(-1px);
+  }
+  #shop .item.owned {
+    background: rgba(20, 50, 30, 0.45);
+    border-color: rgba(120, 200, 140, 0.45);
+    cursor: default;
+  }
+  #shop .item.unaffordable {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  #shop .item-name {
+    font-size: 14px;
+    letter-spacing: 1.5px;
+    color: rgba(220, 235, 255, 0.92);
+  }
+  #shop .item-cost {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 14px;
+    color: #e6b740;
+    letter-spacing: 1px;
+  }
+  #shop .item.owned .item-cost {
+    color: rgba(150, 220, 170, 0.85);
+  }
+  #shop .item.owned .item-cost::after {
+    content: 'OWNED';
+    margin-left: 4px;
+    font-size: 10px;
+    letter-spacing: 3px;
+  }
+  /* Lille guld-prik bruges som inline mønt-ikon i pris-tags */
+  .coin-pip {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 38% 32%, #fff2a8 0%, #e6b740 55%, #7a5410 100%);
+    box-shadow: inset 0 0 0 0.5px #3d2a08, 0 0 4px rgba(255, 210, 100, 0.4);
+  }
+  #shop .launch-btn {
+    padding: 14px 38px;
+    background: transparent;
+    border: 1px solid rgba(180, 220, 255, 0.4);
+    color: rgba(220, 235, 255, 0.75);
+    font-size: 13px;
+    letter-spacing: 6px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    font-family: inherit;
+  }
+  #shop .launch-btn:hover:not(:disabled) {
+    background: rgba(60, 120, 200, 0.22);
+    border-color: rgba(220, 240, 255, 0.75);
+    color: #fff;
+  }
+  #shop .launch-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  #shop .launch-hint {
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: rgba(180, 200, 230, 0.45);
+    margin-top: 14px;
+    min-height: 12px;
+  }
   #gameOver .prompt, #titleScreen .prompt {
     font-size: 12px;
     letter-spacing: 4px;
@@ -217,7 +364,48 @@
   <div class="message">
     Congratulations! You have now earned license to flying a weaponized spacecraft of small type.
   </div>
-  <div class="prompt">PRESS ANY KEY TO CONTINUE</div>
+  <div class="prompt">PRESS ANY KEY TO ENTER QUARTERMASTER</div>
+</div>
+
+<div id="shop">
+  <div class="coin-counter">
+    <svg class="coin-icon" width="36" height="36" viewBox="0 0 28 28" aria-hidden="true">
+      <defs>
+        <radialGradient id="coinGrad" cx="38%" cy="32%">
+          <stop offset="0%" stop-color="#fff2a8"/>
+          <stop offset="55%" stop-color="#e6b740"/>
+          <stop offset="100%" stop-color="#7a5410"/>
+        </radialGradient>
+      </defs>
+      <circle cx="14" cy="14" r="12" fill="url(#coinGrad)" stroke="#3d2a08" stroke-width="0.8"/>
+      <circle cx="14" cy="14" r="9" fill="none" stroke="rgba(60,40,5,0.45)" stroke-width="0.6"/>
+    </svg>
+    <span id="coinAmount">100</span>
+  </div>
+  <div class="shop-title">QUARTERMASTER</div>
+  <div class="shop-subtitle">EQUIP FOR NEXT MISSION</div>
+  <div class="shop-categories">
+    <div class="category">
+      <div class="category-title">SPACECRAFT</div>
+      <div class="item" data-item="ship-tiny" data-cost="80" data-slot="ship">
+        <span class="item-name">Tiny Spaceship</span>
+        <span class="item-cost">80 <span class="coin-pip"></span></span>
+      </div>
+    </div>
+    <div class="category">
+      <div class="category-title">WEAPONS</div>
+      <div class="item" data-item="weapon-mg" data-cost="10" data-slot="weapon">
+        <span class="item-name">Machine Gun</span>
+        <span class="item-cost">10 <span class="coin-pip"></span></span>
+      </div>
+      <div class="item" data-item="weapon-rl" data-cost="30" data-slot="weapon">
+        <span class="item-name">Rocket Launcher</span>
+        <span class="item-cost">30 <span class="coin-pip"></span></span>
+      </div>
+    </div>
+  </div>
+  <button class="launch-btn" id="shopLaunch" disabled>LAUNCH</button>
+  <div class="launch-hint" id="shopLaunchHint">REQUIRES 1 SPACECRAFT + 1 WEAPON</div>
 </div>
 
 <audio id="titleMusic" src="title-music.mp4" loop preload="auto"></audio>
@@ -237,6 +425,10 @@ const scoreEl = document.getElementById('score');
 const gameOverEl = document.getElementById('gameOver');
 const titleEl = document.getElementById('titleScreen');
 const victoryEl = document.getElementById('victory');
+const shopEl = document.getElementById('shop');
+const coinAmountEl = document.getElementById('coinAmount');
+const shopLaunchBtn = document.getElementById('shopLaunch');
+const shopLaunchHintEl = document.getElementById('shopLaunchHint');
 const titleMusicEl = document.getElementById('titleMusic');
 const gameMusicEl = document.getElementById('gameMusic');
 titleMusicEl.volume = 0.6;
@@ -246,6 +438,11 @@ gameMusicEl.volume = 0.55;
 let titleVisible = true;
 // Victory-state: saettes naar score naar 1000 — fryser gameplay og viser overlay.
 let victoryVisible = false;
+// Shop-state (phase 2): fryser gameplay og viser quartermaster-overlay efter graduation.
+let shopVisible = false;
+// Spillerens mønter og ejede items. Nulstilles ved hvert shop-besoeg (placeholder for phase 2 trin 1).
+let coins = 100;
+let owned = { ship: null, weapons: [] };
 
 function playTrack(el) {
   el.currentTime = 0;
@@ -565,9 +762,14 @@ window.addEventListener('keydown', e => {
     if (isMovementKey) e.preventDefault();
     return;
   }
-  // Victory: enhver tast tager spilleren tilbage til en ny simulation.
+  // Victory: enhver tast aabner quartermaster-shoppen.
   if (victoryVisible) {
-    if (!e.repeat) restartGame();
+    if (!e.repeat) openShop();
+    if (isMovementKey) e.preventDefault();
+    return;
+  }
+  // Shop: tastatur er deaktiveret — alt foregaar med musen i overlay'et.
+  if (shopVisible) {
     if (isMovementKey) e.preventDefault();
     return;
   }
@@ -780,10 +982,79 @@ function restartGame() {
   gameOverEl.classList.remove('visible');
   victoryEl.classList.remove('visible');
   victoryVisible = false;
+  // Defensiv: shop kan ogsaa staa aaben (fx hvis logikken kalder restartGame direkte).
+  shopEl.classList.remove('visible');
+  shopVisible = false;
+  mouse.down = false;   // forhindrer at LMB-klik paa LAUNCH-knappen straks affyrer kanonen
   stopTitleMusic();
   playGameMusic();
   stopThrust();   // defensiv: ingen lingering thrust efter restart
 }
+
+// ===== SHOP / QUARTERMASTER (phase 2 trin 1) =====================================
+// Trin 1: kun UI + mønter. Køb registreres men har endnu ingen gameplay-effekt;
+// senere phase 2-commits kobler tiny ship, hull HP og våben-typer paa.
+function openShop() {
+  // Fresh shop-besoeg: ryd victory og start med 100 moenter + tom ejer-liste.
+  victoryEl.classList.remove('visible');
+  victoryVisible = false;
+  coins = 100;
+  owned = { ship: null, weapons: [] };
+  updateShopUI();
+  shopVisible = true;
+  shopEl.classList.add('visible');
+  // Titelmusikken kører videre — ingen kamp under shoppen.
+}
+
+function buyItem(id, cost, slot) {
+  if (coins < cost) return;
+  if (slot === 'ship') {
+    if (owned.ship !== null) return;   // én skib-slot, ingen dobbeltkøb
+    owned.ship = id;
+  } else {
+    if (owned.weapons.includes(id)) return;
+    owned.weapons.push(id);
+  }
+  coins -= cost;
+  updateShopUI();
+}
+
+function updateShopUI() {
+  coinAmountEl.textContent = coins;
+  shopEl.querySelectorAll('.item').forEach(el => {
+    const id = el.dataset.item;
+    const cost = parseInt(el.dataset.cost, 10);
+    const slot = el.dataset.slot;
+    const isOwned = (slot === 'ship') ? owned.ship === id : owned.weapons.includes(id);
+    el.classList.toggle('owned', isOwned);
+    el.classList.toggle('unaffordable', !isOwned && coins < cost);
+  });
+  const hasShip = owned.ship !== null;
+  const hasWeapon = owned.weapons.length > 0;
+  const canLaunch = hasShip && hasWeapon;
+  shopLaunchBtn.disabled = !canLaunch;
+  // Hint forklarer hvad der mangler — tom string naar alt er klart.
+  if (canLaunch) shopLaunchHintEl.textContent = '';
+  else if (!hasShip && !hasWeapon) shopLaunchHintEl.textContent = 'REQUIRES 1 SPACECRAFT + 1 WEAPON';
+  else if (!hasShip) shopLaunchHintEl.textContent = 'SELECT A SPACECRAFT';
+  else shopLaunchHintEl.textContent = 'SELECT A WEAPON';
+}
+
+// Item-klik = køb. Bemærk: brug 'click' (ikke mousedown) saa man slipper for
+// utilsigtede koeb hvis musen drages over et item under en allerede holdt LMB.
+shopEl.querySelectorAll('.item').forEach(el => {
+  el.addEventListener('click', () => {
+    const id = el.dataset.item;
+    const cost = parseInt(el.dataset.cost, 10);
+    const slot = el.dataset.slot;
+    buyItem(id, cost, slot);
+  });
+});
+
+shopLaunchBtn.addEventListener('click', () => {
+  if (shopLaunchBtn.disabled) return;
+  restartGame();   // restartGame rydder shop-state og starter en ny simulation
+});
 
 function triggerVictory() {
   // Spilleren har bestaaet simulationen — frys gameplay og vis license-overlay.
@@ -843,9 +1114,9 @@ function spawnEnemy() {
 // ============================================================================
 let lastTime = performance.now();
 function update(now) {
-  // Frys spillet mens titelskaerm eller victory-overlay vises — opdater lastTime
-  // saa dt ikke akkumulerer under pause.
-  if (titleVisible || victoryVisible) {
+  // Frys spillet mens titel, victory eller shop vises — opdater lastTime saa dt
+  // ikke akkumulerer under pause.
+  if (titleVisible || victoryVisible || shopVisible) {
     lastTime = now;
     return;
   }
