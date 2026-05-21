@@ -625,6 +625,38 @@ function brianOnKill() {
   const idx = BRIAN_MOODS.indexOf(brianMood);
   if (idx < BRIAN_MOODS.length - 1) setBrianMood(BRIAN_MOODS[idx + 1]);
 }
+
+// Brians humør paavirker skibets ydeevne. Multipliers er relativt til Content (1.0).
+// aimError er i grader (±). fireMult > 1 = en tryk affyrer flere skud (Angry).
+// thrust = accel, proj = projektil-hastighed, rof = rate-of-fire (cooldown / rof),
+// thrustRot = thruster-disk rotation, turretRot = taarn-rotation mod mus.
+const MOOD_EFFECTS = {
+  Apathy:         { thrust: 0.90, proj: 0.85, rof: 0.85, thrustRot: 0.85, turretRot: 0.85, aimError: 0, fireMult: 1 },
+  Grief:          { thrust: 0.85, proj: 0.90, rof: 0.90, thrustRot: 0.90, turretRot: 0.90, aimError: 0, fireMult: 1 },
+  Afraid:         { thrust: 1.20, proj: 1.00, rof: 1.00, thrustRot: 1.10, turretRot: 1.10, aimError: 8, fireMult: 1 },
+  Angry:          { thrust: 1.00, proj: 1.15, rof: 1.00, thrustRot: 1.15, turretRot: 1.15, aimError: 5, fireMult: 2 },
+  Antagonistic:   { thrust: 0.90, proj: 1.10, rof: 1.10, thrustRot: 0.95, turretRot: 0.95, aimError: 0, fireMult: 1 },
+  Content:        { thrust: 1.00, proj: 1.00, rof: 1.00, thrustRot: 1.00, turretRot: 1.00, aimError: 0, fireMult: 1 },
+  StrongInterest: { thrust: 1.05, proj: 1.05, rof: 1.05, thrustRot: 1.05, turretRot: 1.05, aimError: 0, fireMult: 1 },
+  Cheerful:       { thrust: 1.10, proj: 1.10, rof: 1.10, thrustRot: 1.10, turretRot: 1.10, aimError: 0, fireMult: 1 },
+  Enthusiastic:   { thrust: 1.20, proj: 1.20, rof: 1.20, thrustRot: 1.20, turretRot: 1.20, aimError: 0, fireMult: 1 },
+  Serenity:       { thrust: 1.50, proj: 1.50, rof: 1.50, thrustRot: 1.50, turretRot: 1.50, aimError: 0, fireMult: 1 },
+};
+function moodFx() { return MOOD_EFFECTS[brianMood] || MOOD_EFFECTS.Content; }
+
+// Aim-vinkel for et skud — taarnet peger paa musen, men ramte vinkel kan have
+// fejlmargin (Angry/Afraid). Tilfaeldigt ±aimError grader pr. skud.
+function firingAngle() {
+  const errDeg = moodFx().aimError;
+  if (errDeg === 0) return player.turretAngle;
+  const errRad = errDeg * Math.PI / 180;
+  return player.turretAngle + (Math.random() * 2 - 1) * errRad;
+}
+
+// Angry + MG: trigger "fastholdes" — naar man har klikket en gang fyrer
+// maskingevaeret automatisk indtil overophedet, ogsaa hvis musen slippes.
+// Nulstilles ved overheat eller respawn. Lever sin egen logik via brianMood-check.
+let mgStuckFire = false;
 const titleMusicEl = document.getElementById('titleMusic');
 const gameMusicEl = document.getElementById('gameMusic');
 titleMusicEl.volume = 0.6;
@@ -1277,6 +1309,7 @@ function spawnPlayer() {
   // Brian starter altid frisk paa Content ved nyt liv. Streak nulstilles.
   brianCleanKills = 0;
   setBrianMood(BRIAN_DEFAULT);
+  mgStuckFire = false;
 }
 spawnPlayer();
 
@@ -1512,7 +1545,7 @@ function update(now) {
   while (tDiff > Math.PI) tDiff -= Math.PI * 2;
   while (tDiff < -Math.PI) tDiff += Math.PI * 2;
   const TURRET_SPEED = 18;  // radians/sec - very fast, almost instant
-  const tStep = TURRET_SPEED * dtSec;
+  const tStep = TURRET_SPEED * moodFx().turretRot * dtSec;
   if (Math.abs(tDiff) < tStep) {
     player.turretAngle = targetTurretAngle;
   } else {
@@ -1524,7 +1557,7 @@ function update(now) {
   // --- Player thrust ---
   // Left/Right arrows rotate the thruster disc directly.
   // Up arrow ignites the engine (thrust opposite to disc orientation).
-  const ROTATE_SPEED = 4.16;  // radians/sec - was 3.2, +30%
+  const ROTATE_SPEED = 4.16 * moodFx().thrustRot;  // mood-skaleret thruster-rotation
   if (keys['ArrowLeft']  || keys['KeyA']) player.thrusterAngle -= ROTATE_SPEED * dtSec;
   if (keys['ArrowRight'] || keys['KeyD']) player.thrusterAngle += ROTATE_SPEED * dtSec;
   // Normalize
@@ -1547,8 +1580,10 @@ function update(now) {
   }
   player.throttle = Math.max(0, Math.min(1, player.throttle));
 
-  // Apply acceleration opposite to thruster orientation (flame pushes ship)
-  const THRUST = 60;   // pixels/sec^2 - very slow, naval/capital-ship feel
+  // Apply acceleration opposite to thruster orientation (flame pushes ship).
+  // MAX_SPEED-cap'en aendres ikke af mood — humøret aendrer hvor hurtigt man
+  // accelerere, ikke topfart. Det holder kapitalskib-feel uden bizarre flyverier.
+  const THRUST = 60 * moodFx().thrust;   // mood-skaleret accel
   const accelAngle = player.thrusterAngle + Math.PI;
   const ax = Math.cos(accelAngle) * THRUST * player.throttle;
   const ay = Math.sin(accelAngle) * THRUST * player.throttle;
@@ -1578,16 +1613,22 @@ function update(now) {
   // Raket: 3-skuds burst med 180ms imellem, derefter 900ms reload.
   // MG: kontinuerlig fyring, ~90ms imellem skud (ca 11 rps), med overheat-bar.
   if (player.fireCooldown > 0) player.fireCooldown -= dt;
+  const rof = moodFx().rof;
   if (equippedWeapon === 'weapon-mg') {
     // Heat-dynamik: stiger 1/3 per sekund mens man fyrer (fuld paa 3s),
     // falder 2/3 per sekund naar man ikke fyrer (tom paa 1.5s). Locked ved
     // 100%, unlocked igen naar heat er nul.
-    const wantFire = mouse.down && !player.overheated;
+    // Angry-sticky: én tryk og maskingevaeret fyrer indtil overophedet.
+    if (mouse.down && brianMood === 'Angry') mgStuckFire = true;
+    if (player.overheated) mgStuckFire = false;
+    const triggerHeld = mouse.down || (brianMood === 'Angry' && mgStuckFire);
+    const wantFire = triggerHeld && !player.overheated;
     if (wantFire) {
       player.heat += dtSec / 3;
       if (player.heat >= 1.0) {
         player.heat = 1.0;
         player.overheated = true;
+        mgStuckFire = false;   // overheat braekker stuck-fyringen
       }
     } else {
       player.heat -= dtSec / 1.5;
@@ -1597,9 +1638,9 @@ function update(now) {
       }
     }
     if (wantFire && player.fireCooldown <= 0) {
-      fireMGBullet();
+      fireMGBullet(firingAngle());
       sfxMachineGun();
-      player.fireCooldown = 90;
+      player.fireCooldown = 90 / rof;
     }
     updateHeatHUD();
   } else {
@@ -1608,13 +1649,17 @@ function update(now) {
       player.magazine = 3;
     }
     if (mouse.down && player.fireCooldown <= 0 && player.magazine > 0) {
-      fireBullet();
+      // Angry: trigger "fastholdes" → fireMult raketter pr. klik (clamped til magasin).
+      const burst = Math.min(moodFx().fireMult, player.magazine);
+      for (let k = 0; k < burst; k++) {
+        fireBullet(firingAngle());
+        player.magazine--;
+      }
       sfxFire();
-      player.magazine--;
       if (player.magazine > 0) {
-        player.fireCooldown = 180;   // kort pause inde i burst'en
+        player.fireCooldown = 180 / rof;   // kort pause inde i burst'en
       } else {
-        player.fireCooldown = 900;   // reload efter 3. skud
+        player.fireCooldown = 900 / rof;   // reload efter sidste skud
       }
     }
   }
@@ -1927,22 +1972,25 @@ function update(now) {
   }
 }
 
-function fireBullet() {
+function fireBullet(angle) {
+  if (angle === undefined) angle = player.turretAngle;
   // Rocket: starts slow, burns to target speed, then coasts.
-  const TARGET_SPEED = 448;   // +40% vs tidligere 320
-  const INITIAL_SPEED = 134;  // 30% of target - burner ignites here
-  const ACCEL = 523;          // px/s^2: reaches target in ~0.6s
+  // Mood-skalerer alle tre hastigheder ens, saa timing (~0.6s til target) holdes.
+  const projMult = moodFx().proj;
+  const TARGET_SPEED  = 448 * projMult;   // +40% vs tidligere 320
+  const INITIAL_SPEED = 134 * projMult;   // 30% of target - burner ignites here
+  const ACCEL         = 523 * projMult;   // px/s^2: reaches target in ~0.6s
   const turretX = player.x;
   const turretY = player.y - 8;
   const barrelLen = 14;
   bullets.push({
     kind: 'rocket',
-    x: turretX + Math.cos(player.turretAngle) * barrelLen,
-    y: turretY + Math.sin(player.turretAngle) * barrelLen,
-    vx: player.vx + Math.cos(player.turretAngle) * INITIAL_SPEED,
-    vy: player.vy + Math.sin(player.turretAngle) * INITIAL_SPEED,
+    x: turretX + Math.cos(angle) * barrelLen,
+    y: turretY + Math.sin(angle) * barrelLen,
+    vx: player.vx + Math.cos(angle) * INITIAL_SPEED,
+    vy: player.vy + Math.sin(angle) * INITIAL_SPEED,
     life: 4500,
-    angle: player.turretAngle,
+    angle: angle,
     ownSpeed: INITIAL_SPEED,
     targetSpeed: TARGET_SPEED,
     accel: ACCEL,
@@ -1952,19 +2000,20 @@ function fireBullet() {
 
 // MG-kugle: konstant fart (3x raket-target = 1344 px/s), ingen burner, lille
 // stoerrelse. Lever kun saa laenge at den kan krydse en skaerm — taler 1/3 hit.
-function fireMGBullet() {
-  const SPEED = 1344;          // 3x raket target speed (448)
+function fireMGBullet(angle) {
+  if (angle === undefined) angle = player.turretAngle;
+  const SPEED = 1344 * moodFx().proj;     // 3x raket target speed, mood-skaleret
   const turretX = player.x;
   const turretY = player.y - 8;
   const barrelLen = 14;
   bullets.push({
     kind: 'mg',
-    x: turretX + Math.cos(player.turretAngle) * barrelLen,
-    y: turretY + Math.sin(player.turretAngle) * barrelLen,
-    vx: player.vx + Math.cos(player.turretAngle) * SPEED,
-    vy: player.vy + Math.sin(player.turretAngle) * SPEED,
-    life: 1200,                 // 1.2s — rigeligt til at krydse skaerm ved 1344 px/s
-    angle: player.turretAngle,
+    x: turretX + Math.cos(angle) * barrelLen,
+    y: turretY + Math.sin(angle) * barrelLen,
+    vx: player.vx + Math.cos(angle) * SPEED,
+    vy: player.vy + Math.sin(angle) * SPEED,
+    life: 1200,                 // 1.2s — rigeligt til at krydse skaerm
+    angle: angle,
     burnerOn: false             // ingen accel-fase
   });
 }
