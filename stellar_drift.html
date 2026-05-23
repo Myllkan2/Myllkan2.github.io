@@ -1355,14 +1355,29 @@ function openShop() {
 }
 
 function buyItem(id, cost, slot) {
-  if (coins < cost) return;
+  // Klik paa et allerede ejet item = fortryd koebet og faa moenterne tilbage.
+  // Det redder spilleren fra at sidde fast hvis han fx koeber rocket launcher
+  // (30) og saa ikke har raad til et skib.
   if (slot === 'ship') {
-    if (owned.ship !== null) return;   // én skib-slot, ingen dobbeltkøb
-    owned.ship = id;
+    if (owned.ship === id) {
+      owned.ship = null;
+      coins += cost;
+      updateShopUI();
+      return;
+    }
+    if (owned.ship !== null) return;   // én skib-slot ad gangen
   } else {
-    if (owned.weapons.includes(id)) return;
-    owned.weapons.push(id);
+    const idx = owned.weapons.indexOf(id);
+    if (idx !== -1) {
+      owned.weapons.splice(idx, 1);
+      coins += cost;
+      updateShopUI();
+      return;
+    }
   }
+  if (coins < cost) return;
+  if (slot === 'ship') owned.ship = id;
+  else owned.weapons.push(id);
   coins -= cost;
   updateShopUI();
 }
