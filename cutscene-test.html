@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<title>Cutscene Test — Stellar Drift</title>
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    background: #000;
+    color: #ddd;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ---------- Generel scene-container ---------- */
+  .scene {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 800ms ease;
+  }
+  .scene.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* ---------- "Pirat-scene færdig" placeholder ---------- */
+  #pirateScene {
+    flex-direction: column;
+    gap: 24px;
+  }
+  #pirateScene h1 {
+    font-weight: 300;
+    letter-spacing: 2px;
+    color: #888;
+    margin: 0;
+  }
+  #pirateScene p {
+    color: #555;
+    max-width: 480px;
+    text-align: center;
+    line-height: 1.6;
+    margin: 0 24px;
+  }
+  button.primary {
+    padding: 14px 28px;
+    background: transparent;
+    border: 1px solid #555;
+    color: #ccc;
+    font-size: 14px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 200ms ease;
+  }
+  button.primary:hover {
+    background: #111;
+    border-color: #aaa;
+    color: #fff;
+  }
+
+  /* ---------- Cutscene-scene ---------- */
+  #cutsceneScene {
+    background: #000;
+  }
+  #cutsceneVideo {
+    max-width: 100%;
+    max-height: 100%;
+    background: #000;
+  }
+
+  /* Skip-knap (kun synlig efter første visning) */
+  #skipBtn {
+    position: absolute;
+    bottom: 32px; right: 32px;
+    padding: 10px 18px;
+    background: rgba(0,0,0,0.55);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: rgba(255,255,255,0.85);
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 400ms ease, background 200ms ease;
+    backdrop-filter: blur(4px);
+  }
+  #skipBtn.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #skipBtn:hover {
+    background: rgba(20,20,20,0.85);
+    border-color: rgba(255,255,255,0.5);
+  }
+
+  /* ---------- Shop placeholder ---------- */
+  #shopScene {
+    flex-direction: column;
+    gap: 24px;
+  }
+  #shopScene h1 {
+    font-weight: 300;
+    letter-spacing: 4px;
+    color: #6cf;
+    margin: 0;
+  }
+  #shopScene p {
+    color: #555;
+  }
+
+  /* ---------- Debug-overlay ---------- */
+  #debug {
+    position: fixed;
+    top: 12px; left: 12px;
+    padding: 10px 14px;
+    background: rgba(15,15,15,0.9);
+    border: 1px solid #222;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #888;
+    font-family: ui-monospace, monospace;
+    z-index: 1000;
+    line-height: 1.5;
+  }
+  #debug strong { color: #fff; }
+  #debug button {
+    margin-top: 6px;
+    background: #222;
+    border: 1px solid #444;
+    color: #ccc;
+    padding: 4px 8px;
+    font-size: 10px;
+    font-family: inherit;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  #debug button:hover { background: #333; }
+</style>
+</head>
+<body>
+
+<!-- DEBUG-OVERLAY (fjernes ved integration i hovedspil) -->
+<div id="debug">
+  <div>cutscene-test.html</div>
+  <div>Set før: <strong id="dbgSeen">—</strong></div>
+  <div>Skip muligt: <strong id="dbgSkippable">—</strong></div>
+  <div>Musik: <strong id="dbgMusic">stoppet</strong></div>
+  <button onclick="resetFirstView()">Reset (test som første gang)</button>
+</div>
+
+<!-- SCENE 1: Pirat-scene afslutter (placeholder) -->
+<div id="pirateScene" class="scene active">
+  <h1>[ PIRAT-SCENE FÆRDIG ]</h1>
+  <p>Placeholder — i hovedspillet sker denne overgang automatisk når sidste pirat er nedlagt.</p>
+  <button class="primary" onclick="startCutscene()">Trigger cutscene →</button>
+</div>
+
+<!-- SCENE 2: Cutscene -->
+<div id="cutsceneScene" class="scene">
+  <video
+    id="cutsceneVideo"
+    preload="auto"
+    playsinline
+    src="Cutscene%20after%20pirates.mp4">
+  </video>
+  <button id="skipBtn" onclick="endCutscene()">SPRING OVER →</button>
+</div>
+
+<!-- SCENE 3: Shop (placeholder) -->
+<div id="shopScene" class="scene">
+  <h1>SHOP</h1>
+  <p>Placeholder — næste scene efter cutscenen.<br>Musikken skal fortsætte her.</p>
+  <button class="primary" onclick="resetToStart()">↺ Spil igen fra start</button>
+</div>
+
+<!-- BAGGRUNDSMUSIK: lever på tværs af scener -->
+<audio
+  id="bgMusic"
+  preload="auto"
+  src="Travel%20-%20Pour%20Elle%2C%20%C3%A0%20Travers%20les%20Mondes.mp3">
+</audio>
+
+<script>
+  // ---------- localStorage til "set før"-tracking ----------
+  const SEEN_KEY = 'stellardrift.cutscene.familyPhoto.seen';
+
+  function hasSeenBefore() {
+    return localStorage.getItem(SEEN_KEY) === '1';
+  }
+  function markAsSeen() {
+    localStorage.setItem(SEEN_KEY, '1');
+  }
+  function resetFirstView() {
+    localStorage.removeItem(SEEN_KEY);
+    updateDebug();
+    alert('Reset! Genindlæs siden for at teste som første gang.');
+  }
+
+  // ---------- Scene-skift med fade ----------
+  function showScene(id) {
+    document.querySelectorAll('.scene').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  // ---------- Lyd-niveauer ----------
+  // Matcher pirat-scenens balance i stellar_drift.html:
+  //   gameMusicEl.volume = 0.55 / sfxGain.gain.value = 0.45  (ratio ~1.22)
+  // Travel-musikken kører på spillets musik-spor, Veo's indlejrede ambient
+  // lyde behandles som SFX og lægges på samme niveau som game-SFX.
+  const MUSIC_VOLUME     = 0.55;
+  const VIDEO_SFX_VOLUME = 0.45;
+
+  // ---------- Cutscene-flow ----------
+  const video   = document.getElementById('cutsceneVideo');
+  const music   = document.getElementById('bgMusic');
+  const skipBtn = document.getElementById('skipBtn');
+  let skipTimer = null;
+  let musicFadeTimer = null;
+
+  // Fade musik blødt op fra 0 → target over `duration` ms
+  function fadeMusicIn(target = MUSIC_VOLUME, duration = 1500) {
+    clearInterval(musicFadeTimer);
+    music.volume = 0;
+    const steps = 30;
+    const stepTime = duration / steps;
+    let i = 0;
+    musicFadeTimer = setInterval(() => {
+      i++;
+      music.volume = Math.min(target, (i / steps) * target);
+      if (i >= steps) clearInterval(musicFadeTimer);
+    }, stepTime);
+  }
+
+  function startCutscene() {
+    showScene('cutsceneScene');
+
+    // Vent på fade-in (matcher CSS transition) før vi spiller
+    setTimeout(() => {
+      video.currentTime = 0;
+      video.volume = VIDEO_SFX_VOLUME;   // Veo's indlejrede ambient = SFX-niveau
+      video.play().catch(err => {
+        console.warn('Autoplay blokeret (video):', err);
+      });
+
+      // Start musik fra begyndelsen, fade blødt op til musik-niveau
+      music.currentTime = 0;
+      music.play().catch(err => {
+        console.warn('Autoplay blokeret (musik):', err);
+      });
+      fadeMusicIn(MUSIC_VOLUME, 1500);
+    }, 850);
+
+    // Skip-knap: vises kun hvis spilleren har set scenen før
+    if (hasSeenBefore()) {
+      skipTimer = setTimeout(() => {
+        skipBtn.classList.add('visible');
+      }, 2000);  // 2 sek delay så man ikke kommer til at klikke
+    }
+
+    updateDebug();
+  }
+
+  function endCutscene() {
+    clearTimeout(skipTimer);
+    skipBtn.classList.remove('visible');
+    video.pause();
+    markAsSeen();
+    showScene('shopScene');
+    // VIGTIGT: musikken stoppes IKKE. Den fortsætter ind i shop-scenen.
+    updateDebug();
+  }
+
+  // Når videoen slutter naturligt → gå videre
+  video.addEventListener('ended', endCutscene);
+
+  // ---------- Genstart-knap (test-only) ----------
+  function resetToStart() {
+    showScene('pirateScene');
+    video.currentTime = 0;
+    // Stop musikken kun ved fuld reset (så vi kan starte forfra)
+    music.pause();
+    music.currentTime = 0;
+    updateDebug();
+  }
+
+
+  // ---------- Debug-display ----------
+  function updateDebug() {
+    document.getElementById('dbgSeen').textContent = hasSeenBefore() ? 'ja' : 'nej';
+    document.getElementById('dbgSkippable').textContent = hasSeenBefore() ? 'ja (efter 2s)' : 'nej (første gang)';
+  }
+  // Live-opdater musik-status så vi kan se den faktisk spiller på tværs af scener
+  setInterval(() => {
+    const dbg = document.getElementById('dbgMusic');
+    if (music.paused) {
+      dbg.textContent = 'stoppet';
+    } else {
+      const t = Math.floor(music.currentTime);
+      const m = Math.floor(t / 60), s = t % 60;
+      const videoVol = video.paused ? '—' : video.volume.toFixed(2);
+      dbg.textContent = `musik ${music.volume.toFixed(2)} | video-sfx ${videoVol} (${m}:${String(s).padStart(2,'0')})`;
+    }
+  }, 250);
+  updateDebug();
+</script>
+
+</body>
+</html>
