@@ -199,7 +199,7 @@
     font-size: 11px;
     letter-spacing: 2px;
   }
-  #gameOver, #titleScreen, #victory, #cutscene, #ambushWin {
+  #gameOver, #titleScreen, #victory, #cutscene, #ambushWin, #familyCutscene {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     display: flex;
@@ -366,6 +366,47 @@
     letter-spacing: 4px;
     color: rgba(200, 220, 240, 0.7);
     animation: gov-blink 1.5s ease-in-out infinite;
+  }
+  /* Family-cutscene: melankolsk video-mellemspil mellem ambush-win og shop.
+     Helt sort baggrund — videoen baerer scenen, ingen tekst-overlay. */
+  #familyCutscene {
+    background: #000;
+  }
+  #familyCutscene.visible {
+    opacity: 1;
+    transition: opacity 1.2s ease-in 0.3s;  /* roligt fade-in, matcher victory/cutscene-stilen */
+  }
+  #familyCutscene video {
+    max-width: 100%;
+    max-height: 100%;
+    background: #000;
+  }
+  /* Skip-knap: kun synlig efter foerste gennemspilning. Nederst-hoejre,
+     diskret saa den ikke trækker oejet vaek fra videoen. */
+  #familyCutscene .skip-btn {
+    position: absolute;
+    bottom: 32px;
+    right: 32px;
+    padding: 10px 18px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 12px;
+    letter-spacing: 3px;
+    font-family: inherit;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease, background 0.2s ease, border-color 0.2s ease;
+    backdrop-filter: blur(4px);
+  }
+  #familyCutscene .skip-btn.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #familyCutscene .skip-btn:hover {
+    background: rgba(20, 20, 20, 0.85);
+    border-color: rgba(255, 255, 255, 0.5);
   }
   /* ===== SHOP / QUARTERMASTER (phase 2) ===== */
   #shop {
@@ -653,8 +694,18 @@
   <div class="prompt">PRESS ANY KEY TO CONTINUE</div>
 </div>
 
+<!-- Family-cutscene: spilles efter ambush-win, foer shop. Veo-genereret video
+     med Brians familiebillede og halvtomt whiskeyglas; Travel-musikken bærer scenen. -->
+<div id="familyCutscene">
+  <video id="familyCutsceneVideo" preload="auto" playsinline src="Cutscene%20after%20pirates.mp4"></video>
+  <button id="familyCutsceneSkipBtn" class="skip-btn">SKIP &rarr;</button>
+</div>
+
 <audio id="titleMusic" src="title-music.mp4" loop preload="auto"></audio>
 <audio id="gameMusic" src="stellar-drift-beginning.mp3" loop preload="auto"></audio>
+<!-- Travel: instrumental/vocal track der starter under family-cutscenen og
+     fortsætter ind i shoppen — saa det emotionelle slip ikke brydes. -->
+<audio id="travelMusic" src="Travel%20-%20Pour%20Elle%2C%20%C3%A0%20Travers%20les%20Mondes.mp3" loop preload="auto"></audio>
 
 <script>
 'use strict';
@@ -676,6 +727,9 @@ const shopLaunchBtn = document.getElementById('shopLaunch');
 const shopLaunchHintEl = document.getElementById('shopLaunchHint');
 const cutsceneEl = document.getElementById('cutscene');
 const ambushWinEl = document.getElementById('ambushWin');
+const familyCutsceneEl = document.getElementById('familyCutscene');
+const familyCutsceneVideo = document.getElementById('familyCutsceneVideo');
+const familyCutsceneSkipBtn = document.getElementById('familyCutsceneSkipBtn');
 const hullFillEl = document.getElementById('hullFill');
 const hullPctEl = document.getElementById('hullPct');
 const heatBlockEl = document.getElementById('heatBlock');
@@ -761,8 +815,14 @@ function firingAngle() {
 let mgStuckFire = false;
 const titleMusicEl = document.getElementById('titleMusic');
 const gameMusicEl = document.getElementById('gameMusic');
+const travelMusicEl = document.getElementById('travelMusic');
 titleMusicEl.volume = 0.6;
 gameMusicEl.volume = 0.55;
+// Travel kører paa samme niveau som gameMusic (0.55). Veo's indlejrede ambient
+// lyde i videoen behandles som SFX og laegges paa 0.45 — samme ratio som
+// gameMusic vs. sfxGain (0.55 / 0.45) under selve kampen.
+travelMusicEl.volume = 0.55;
+const CUTSCENE_VIDEO_VOLUME = 0.45;
 
 // Title-state og musik-helpere
 let titleVisible = true;
@@ -777,6 +837,11 @@ let shopVisible = false;
 // Cutscene-state: lille ambush-historie mellem shop-LAUNCH og selve kampen.
 // Fryser gameplay som de andre overlays.
 let cutsceneVisible = false;
+// Family-cutscene-state: video-mellemspil mellem ambush-win og shop. Foerste
+// gennemspilning tvinges; senere visninger kan springes over via knappen.
+let familyCutsceneVisible = false;
+let familyCutsceneSkipTimer = null;
+const FAMILY_CUTSCENE_SEEN_KEY = 'stellardrift.cutscene.familyPhoto.seen';
 // Ambush-win: 10 kills i post-graduation missionen. Spillet kører videre (saa
 // fjenderne kan flygte ud og raketter kan dø ud) men kollisioner er slaaet fra.
 let pirateKills = 0;
@@ -803,6 +868,27 @@ function playTitleMusic() { playTrack(titleMusicEl); }
 function stopTitleMusic() { stopTrack(titleMusicEl); }
 function playGameMusic()  { gameMusicEl.volume = 0.55; playTrack(gameMusicEl); }
 function stopGameMusic()  { stopTrack(gameMusicEl);  }
+function stopTravelMusic(){ stopTrack(travelMusicEl); }
+
+// Fader Travel-musikken blødt fra 0 op til target over `duration` ms. Bruges
+// af family-cutscenen saa musikken ikke slaar brutalt ind oven paa retreat-
+// stilheden fra ambush-win.
+let travelFadeTimer = null;
+function fadeInTravelMusic(target = 0.55, duration = 1500) {
+  clearInterval(travelFadeTimer);
+  travelMusicEl.volume = 0;
+  travelMusicEl.currentTime = 0;
+  const p = travelMusicEl.play();
+  if (p) p.catch(() => {});
+  const steps = 30;
+  const stepTime = duration / steps;
+  let i = 0;
+  travelFadeTimer = setInterval(() => {
+    i++;
+    travelMusicEl.volume = Math.min(target, (i / steps) * target);
+    if (i >= steps) { clearInterval(travelFadeTimer); travelFadeTimer = null; }
+  }, stepTime);
+}
 
 // Forsoeg at starte titelmusikken med det samme — fungerer hvis brugeren allerede
 // har interageret med siden (fx via hot-reload), ellers spillet ved foerste tast.
@@ -1188,11 +1274,18 @@ window.addEventListener('keydown', e => {
     if (isMovementKey) e.preventDefault();
     return;
   }
-  // Ambush-win: enhver tast tager spilleren tilbage til shoppen for naeste runde,
-  // men foerst naar input-lockouten er sluppet (saa retreat-sekvensen + noten
-  // ikke springes over hvis spilleren rammer en tast i samme oejeblik).
+  // Ambush-win: enhver tast tager spilleren videre — foerst gennem family-
+  // cutscenen (melankolsk pilot-rum), derefter ind i shoppen. Foerst naar
+  // input-lockouten er sluppet (saa retreat-sekvensen + noten ikke springes
+  // over hvis spilleren rammer en tast i samme oejeblik).
   if (ambushWon) {
-    if (!e.repeat && ambushInputReady) openShop();
+    if (!e.repeat && ambushInputReady) startFamilyCutscene();
+    if (isMovementKey) e.preventDefault();
+    return;
+  }
+  // Family-cutscene: tastatur er deaktiveret — kun skip-knappen (mus) eller
+  // naturlig afslutning bringer spilleren videre til shoppen.
+  if (familyCutsceneVisible) {
     if (isMovementKey) e.preventDefault();
     return;
   }
@@ -1230,7 +1323,7 @@ window.addEventListener('keydown', e => {
   if (e.code !== 'KeyK' || e.repeat) return;
   if (!hasGraduated || ambushWon) return;
   if (!player.alive || player.dying) return;
-  if (titleVisible || victoryVisible || shopVisible || cutsceneVisible) return;
+  if (titleVisible || victoryVisible || shopVisible || cutsceneVisible || familyCutsceneVisible) return;
   pirateKills = 9;
   console.log('[CHEAT] pirateKills =', pirateKills, '— naeste kill udloeser ambush-win');
 });
@@ -1480,6 +1573,14 @@ function restartGame() {
   ambushWinEl.classList.remove('visible');
   ambushWon = false;
   ambushInputReady = false;
+  // Defensiv: family-cutscene kan teoretisk stadig hænge hvis logikken kalder
+  // restartGame midt i en overgang. Ryd op og stop Travel saa intet leaker.
+  familyCutsceneEl.classList.remove('visible');
+  familyCutsceneVisible = false;
+  familyCutsceneSkipBtn.classList.remove('visible');
+  clearTimeout(familyCutsceneSkipTimer);
+  if (!familyCutsceneVideo.paused) familyCutsceneVideo.pause();
+  stopTravelMusic();
   pirateKills = 0;
   mouse.down = false;   // forhindrer at LMB-klik paa LAUNCH-knappen straks affyrer kanonen
   stopTitleMusic();
@@ -1501,10 +1602,16 @@ function openShop() {
   updateShopUI();
   shopVisible = true;
   shopEl.classList.add('visible');
-  // Shoppen er en rolig forberedelsesfase — skift til titelmusikken (gameMusic
-  // kan vaere igang hvis vi kommer fra ambush-win).
+  // Shoppen er en rolig forberedelsesfase. Kommer vi fra family-cutscenen
+  // lader vi Travel-musikken køre videre — den emotionelle klangbund skal
+  // ikke brydes af et musik-skift. Ellers (foerste shop-besoeg efter
+  // graduation) skifter vi til titelmusikken som foer.
   stopGameMusic();
-  playTitleMusic();
+  if (travelMusicEl.paused) {
+    playTitleMusic();
+  } else {
+    stopTitleMusic();   // defensiv: Travel kører, ingen andre spor i baggrunden
+  }
   stopThrust();
 }
 
@@ -1581,6 +1688,10 @@ shopLaunchBtn.addEventListener('click', () => {
   shopVisible = false;
   cutsceneEl.classList.add('visible');
   cutsceneVisible = true;
+  // Travel-musikken har baaret shoppen hvis vi kom fra family-cutscenen —
+  // nu skal vi tilbage i kamp-mode, saa skift over til text-cutscene-stilhed.
+  // (gameMusic starter naar selve kampen begynder via restartGame.)
+  stopTravelMusic();
 });
 
 // Opdaterer HULL-barometeret i HUD'en ud fra player.hits / player.maxHits.
@@ -1637,6 +1748,76 @@ function triggerAmbushWin() {
   setTimeout(() => { ambushInputReady = true; }, 4800);
 }
 
+// ===== FAMILY-CUTSCENE (post-ambush, pre-shop) =====================================
+// Spilles efter PIRATES BREAK OFF — pilot sidder alene med familiebillede +
+// halvtomt whiskeyglas mens Travel-musikken kører. Foerste gang tvunget, derefter
+// skipbar. Musikken stoppes IKKE naar scenen slutter — den fortsætter ind i shoppen.
+
+function hasSeenFamilyCutscene() {
+  try { return localStorage.getItem(FAMILY_CUTSCENE_SEEN_KEY) === '1'; }
+  catch (_) { return false; }   // privat browsing kan smide; fald tilbage til "ikke set"
+}
+function markFamilyCutsceneSeen() {
+  try { localStorage.setItem(FAMILY_CUTSCENE_SEEN_KEY, '1'); }
+  catch (_) { /* same — ignorer */ }
+}
+
+function startFamilyCutscene() {
+  // Forlad ambush-win-state: vi har vist retreat-noten, nu giver vi pilot-rummet.
+  ambushWinEl.classList.remove('visible');
+  ambushWon = false;
+  ambushInputReady = false;
+
+  // Stop gameMusic (har ligget og spillet siden kampen). Travel-musikken
+  // fader blødt ind i stedet — undgaar at to spor overlapper.
+  stopGameMusic();
+
+  familyCutsceneVisible = true;
+  familyCutsceneEl.classList.add('visible');
+
+  // Vent paa overlay-fade-in (1.2s ease-in 0.3s delay = 1.5s total) foer vi
+  // starter video og musik. Foeles som at scenen "kommer til syne" frem for
+  // at hoppe ind midt i en handling.
+  setTimeout(() => {
+    familyCutsceneVideo.currentTime = 0;
+    familyCutsceneVideo.volume = CUTSCENE_VIDEO_VOLUME;
+    const pv = familyCutsceneVideo.play();
+    if (pv) pv.catch(() => {});
+    fadeInTravelMusic(0.55, 1500);
+  }, 1500);
+
+  // Skip-knap: kun spilleren der har set scenen foer faar tilbuddet om at
+  // springe over. 2s delay saa man ikke kommer til at klikke ved et uheld.
+  familyCutsceneSkipBtn.classList.remove('visible');
+  clearTimeout(familyCutsceneSkipTimer);
+  if (hasSeenFamilyCutscene()) {
+    familyCutsceneSkipTimer = setTimeout(() => {
+      familyCutsceneSkipBtn.classList.add('visible');
+    }, 2000);
+  }
+}
+
+function endFamilyCutscene() {
+  clearTimeout(familyCutsceneSkipTimer);
+  familyCutsceneSkipBtn.classList.remove('visible');
+  familyCutsceneVideo.pause();
+  markFamilyCutsceneSeen();
+  familyCutsceneEl.classList.remove('visible');
+  familyCutsceneVisible = false;
+  // VIGTIGT: Travel-musikken stoppes IKKE her. Den fortsætter ind i shoppen
+  // som klangbund. openShop() ved at den skal lade Travel være.
+  openShop();
+}
+
+// Videoen slutter naturligt → glid videre til shop
+familyCutsceneVideo.addEventListener('ended', () => {
+  if (familyCutsceneVisible) endFamilyCutscene();
+});
+// Skip-knap klik (kun synlig efter foerste gennemspilning)
+familyCutsceneSkipBtn.addEventListener('click', () => {
+  if (familyCutsceneVisible) endFamilyCutscene();
+});
+
 function startGameFromTitle() {
   titleVisible = false;
   titleEl.classList.remove('visible');
@@ -1688,7 +1869,7 @@ let lastTime = performance.now();
 function update(now) {
   // Frys spillet mens titel, victory eller shop vises — opdater lastTime saa dt
   // ikke akkumulerer under pause.
-  if (titleVisible || victoryVisible || shopVisible || cutsceneVisible) {
+  if (titleVisible || victoryVisible || shopVisible || cutsceneVisible || familyCutsceneVisible) {
     lastTime = now;
     return;
   }
