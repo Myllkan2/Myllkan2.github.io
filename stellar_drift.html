@@ -368,10 +368,35 @@
     animation: gov-blink 1.5s ease-in-out infinite;
   }
   /* Family-cutscene: melankolsk video-mellemspil mellem ambush-win og shop.
-     Helt sort baggrund — videoen baerer scenen, ingen tekst-overlay. */
+     Helt sort baggrund — videoen baerer scenen, undertekster lagt ovenpaa. */
   #familyCutscene {
     background: #000;
   }
+  /* Undertekster (Version A — poetisk). Italic serif for sorgfuld tone,
+     bund-position saa de ikke skygger for billedet/figuren midt i framen. */
+  #familyCutscene .subtitle {
+    position: absolute;
+    left: 50%;
+    bottom: 10%;
+    transform: translateX(-50%);
+    max-width: 80%;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.94);
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
+    font-size: clamp(18px, 2.2vw, 26px);
+    font-weight: 300;
+    font-style: italic;
+    letter-spacing: 0.5px;
+    line-height: 1.5;
+    text-shadow:
+      0 2px 12px rgba(0, 0, 0, 0.95),
+      0 0 24px rgba(0, 0, 0, 0.7);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+    white-space: pre-line;
+  }
+  #familyCutscene .subtitle.visible { opacity: 1; }
   #familyCutscene.visible {
     opacity: 1;
     transition: opacity 1.2s ease-in 0.3s;  /* roligt fade-in, matcher victory/cutscene-stilen */
@@ -698,6 +723,7 @@
      med Brians familiebillede og halvtomt whiskeyglas; Travel-musikken bærer scenen. -->
 <div id="familyCutscene">
   <video id="familyCutsceneVideo" preload="auto" playsinline src="Cutscene%20after%20pirates.mp4"></video>
+  <div id="familyCutsceneSubtitle" class="subtitle"></div>
   <button id="familyCutsceneSkipBtn" class="skip-btn">SKIP &rarr;</button>
 </div>
 
@@ -729,6 +755,7 @@ const cutsceneEl = document.getElementById('cutscene');
 const ambushWinEl = document.getElementById('ambushWin');
 const familyCutsceneEl = document.getElementById('familyCutscene');
 const familyCutsceneVideo = document.getElementById('familyCutsceneVideo');
+const familyCutsceneSubtitleEl = document.getElementById('familyCutsceneSubtitle');
 const familyCutsceneSkipBtn = document.getElementById('familyCutsceneSkipBtn');
 const hullFillEl = document.getElementById('hullFill');
 const hullPctEl = document.getElementById('hullPct');
@@ -1580,6 +1607,7 @@ function restartGame() {
   familyCutsceneSkipBtn.classList.remove('visible');
   clearTimeout(familyCutsceneSkipTimer);
   if (!familyCutsceneVideo.paused) familyCutsceneVideo.pause();
+  clearFamilyCutsceneSubtitle();
   stopTravelMusic();
   pirateKills = 0;
   mouse.down = false;   // forhindrer at LMB-klik paa LAUNCH-knappen straks affyrer kanonen
@@ -1762,6 +1790,41 @@ function markFamilyCutsceneSeen() {
   catch (_) { /* same — ignorer */ }
 }
 
+// Undertekster (Version A — poetisk). Tider i sekunder fra videoens start.
+// Brug \n for linjeskift. Juster frit hvis Brian skal have mere/mindre lufttid.
+const FAMILY_CUTSCENE_SUBTITLES = [
+  { start:  0, end:  5, text: "Three years ago, the shadows came." },
+  { start:  5, end: 11, text: "My wife. My daughter." },
+  { start: 11, end: 17, text: "No wreckage. No goodbye." },
+  { start: 17, end: 22, text: "Only silence — and a photograph." },
+  { start: 22, end: 30, text: "…somewhere beyond these stars,\nshe may still be waiting." }
+];
+let familyCutsceneSubIdx = -1;
+let familyCutsceneSubSwapTimer = null;
+
+function setFamilyCutsceneSubtitle(idx) {
+  if (idx === familyCutsceneSubIdx) return;
+  familyCutsceneSubIdx = idx;
+  clearTimeout(familyCutsceneSubSwapTimer);
+  // Fade ud → skift tekst → fade ind (matcher CSS-transition paa 0.5s)
+  familyCutsceneSubtitleEl.classList.remove('visible');
+  familyCutsceneSubSwapTimer = setTimeout(() => {
+    if (idx === -1) {
+      familyCutsceneSubtitleEl.textContent = '';
+    } else {
+      familyCutsceneSubtitleEl.textContent = FAMILY_CUTSCENE_SUBTITLES[idx].text;
+      familyCutsceneSubtitleEl.classList.add('visible');
+    }
+  }, 500);
+}
+
+function clearFamilyCutsceneSubtitle() {
+  clearTimeout(familyCutsceneSubSwapTimer);
+  familyCutsceneSubIdx = -1;
+  familyCutsceneSubtitleEl.classList.remove('visible');
+  familyCutsceneSubtitleEl.textContent = '';
+}
+
 function startFamilyCutscene() {
   // Forlad ambush-win-state: vi har vist retreat-noten, nu giver vi pilot-rummet.
   ambushWinEl.classList.remove('visible');
@@ -1801,6 +1864,7 @@ function endFamilyCutscene() {
   clearTimeout(familyCutsceneSkipTimer);
   familyCutsceneSkipBtn.classList.remove('visible');
   familyCutsceneVideo.pause();
+  clearFamilyCutsceneSubtitle();
   markFamilyCutsceneSeen();
   familyCutsceneEl.classList.remove('visible');
   familyCutsceneVisible = false;
@@ -1816,6 +1880,15 @@ familyCutsceneVideo.addEventListener('ended', () => {
 // Skip-knap klik (kun synlig efter foerste gennemspilning)
 familyCutsceneSkipBtn.addEventListener('click', () => {
   if (familyCutsceneVisible) endFamilyCutscene();
+});
+// Foelg videoens afspilning og synk undertekster mod den.
+// timeupdate er mere robust end setTimeout — drifter ikke hvis browseren stutter
+// eller hvis videoen seekes (selvom vi pt. ikke seeker).
+familyCutsceneVideo.addEventListener('timeupdate', () => {
+  if (!familyCutsceneVisible) return;
+  const t = familyCutsceneVideo.currentTime;
+  const idx = FAMILY_CUTSCENE_SUBTITLES.findIndex(s => t >= s.start && t < s.end);
+  setFamilyCutsceneSubtitle(idx);
 });
 
 function startGameFromTitle() {
