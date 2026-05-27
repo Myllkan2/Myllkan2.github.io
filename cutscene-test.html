@@ -71,6 +71,31 @@
     background: #000;
   }
 
+  /* Cutscene-undertekster (Version A — poetisk) */
+  #cutsceneSubtitle {
+    position: absolute;
+    left: 50%;
+    bottom: 10%;
+    transform: translateX(-50%);
+    max-width: 80%;
+    text-align: center;
+    color: rgba(255,255,255,0.94);
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
+    font-size: clamp(18px, 2.2vw, 26px);
+    font-weight: 300;
+    font-style: italic;
+    letter-spacing: 0.5px;
+    line-height: 1.5;
+    text-shadow:
+      0 2px 12px rgba(0,0,0,0.95),
+      0 0 24px rgba(0,0,0,0.7);
+    opacity: 0;
+    transition: opacity 500ms ease;
+    pointer-events: none;
+    white-space: pre-line;
+  }
+  #cutsceneSubtitle.visible { opacity: 1; }
+
   /* Skip-knap (kun synlig efter første visning) */
   #skipBtn {
     position: absolute;
@@ -166,6 +191,7 @@
     playsinline
     src="Cutscene%20after%20pirates.mp4">
   </video>
+  <div id="cutsceneSubtitle"></div>
   <button id="skipBtn" onclick="endCutscene()">SPRING OVER →</button>
 </div>
 
@@ -214,11 +240,48 @@
   const VIDEO_SFX_VOLUME = 0.45;
 
   // ---------- Cutscene-flow ----------
-  const video   = document.getElementById('cutsceneVideo');
-  const music   = document.getElementById('bgMusic');
-  const skipBtn = document.getElementById('skipBtn');
+  const video      = document.getElementById('cutsceneVideo');
+  const music      = document.getElementById('bgMusic');
+  const skipBtn    = document.getElementById('skipBtn');
+  const subtitleEl = document.getElementById('cutsceneSubtitle');
   let skipTimer = null;
   let musicFadeTimer = null;
+
+  // ---------- Cutscene-undertekster (Version A — poetisk) ----------
+  // Tider er i sekunder fra videoens start. Juster frit.
+  // Brug \n inde i text for linjeskift.
+  const SUBTITLES = [
+    { start:  0, end:  5, text: "Three years ago, the shadows came." },
+    { start:  5, end: 11, text: "My wife. My daughter." },
+    { start: 11, end: 17, text: "No wreckage. No goodbye." },
+    { start: 17, end: 22, text: "Only silence — and a photograph." },
+    { start: 22, end: 30, text: "…somewhere beyond these stars,\nshe may still be waiting." }
+  ];
+  let currentSubIdx = -1;
+  let subSwapTimer = null;
+
+  function setSubtitle(idx) {
+    if (idx === currentSubIdx) return;
+    currentSubIdx = idx;
+    clearTimeout(subSwapTimer);
+    // Fade ud → skift tekst → fade ind (matcher CSS-transition på 500ms)
+    subtitleEl.classList.remove('visible');
+    subSwapTimer = setTimeout(() => {
+      if (idx === -1) {
+        subtitleEl.textContent = '';
+      } else {
+        subtitleEl.textContent = SUBTITLES[idx].text;
+        subtitleEl.classList.add('visible');
+      }
+    }, 500);
+  }
+
+  function clearSubtitle() {
+    clearTimeout(subSwapTimer);
+    currentSubIdx = -1;
+    subtitleEl.classList.remove('visible');
+    subtitleEl.textContent = '';
+  }
 
   // Fade musik blødt op fra 0 → target over `duration` ms
   function fadeMusicIn(target = MUSIC_VOLUME, duration = 1500) {
@@ -267,6 +330,7 @@
     clearTimeout(skipTimer);
     skipBtn.classList.remove('visible');
     video.pause();
+    clearSubtitle();
     markAsSeen();
     showScene('shopScene');
     // VIGTIGT: musikken stoppes IKKE. Den fortsætter ind i shop-scenen.
@@ -276,10 +340,18 @@
   // Når videoen slutter naturligt → gå videre
   video.addEventListener('ended', endCutscene);
 
+  // Følg videoens afspilning og opdater undertekst
+  video.addEventListener('timeupdate', () => {
+    const t = video.currentTime;
+    const idx = SUBTITLES.findIndex(s => t >= s.start && t < s.end);
+    setSubtitle(idx);
+  });
+
   // ---------- Genstart-knap (test-only) ----------
   function resetToStart() {
     showScene('pirateScene');
     video.currentTime = 0;
+    clearSubtitle();
     // Stop musikken kun ved fuld reset (så vi kan starte forfra)
     music.pause();
     music.currentTime = 0;
