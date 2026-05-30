@@ -524,12 +524,13 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding: 50px 40px 40px;
+    padding: 40px 40px 40px;
     background: rgba(0, 0, 12, 0.88);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.4s ease-out;
     font-family: -apple-system, 'Segoe UI', sans-serif;
+    overflow-y: auto;   /* billede + 4 kategorier kan blive hoejere end skaermen */
   }
   #shop.visible {
     opacity: 1;
@@ -561,15 +562,35 @@
     font-size: 11px;
     letter-spacing: 7px;
     color: rgba(160, 190, 220, 0.5);
-    margin-bottom: 42px;
+    margin-bottom: 26px;
+  }
+  /* Cockpit-billedet: pixel-art rum-art ved siden af HTML'en, samme undtagelse
+     som Brian-portraetterne. Vises som "dette er dit skib" oeverst i shoppen;
+     opgraderinger/rengoering byttes ind senere naar de rene varianter er klar. */
+  #shop .cockpit-pic {
+    width: min(720px, 78vw);
+    border: 1px solid rgba(120, 150, 200, 0.35);
+    border-radius: 4px;
+    box-shadow: 0 0 32px rgba(20, 45, 90, 0.55), inset 0 0 40px rgba(0,0,0,0.45);
+    image-rendering: pixelated;   /* pixel art — behold skarpe kanter ved skalering */
+    margin-bottom: 12px;
+  }
+  #shop .cockpit-caption {
+    font-size: 10px;
+    letter-spacing: 5px;
+    color: rgba(160, 190, 220, 0.45);
+    margin-bottom: 40px;
   }
   #shop .shop-categories {
     display: flex;
-    gap: 70px;
+    flex-wrap: wrap;             /* 4 kategorier — ombryd til 2x2 paa smalle skaerme */
+    justify-content: center;
+    gap: 36px 56px;
+    max-width: 1240px;
     margin-bottom: 44px;
   }
   #shop .category {
-    min-width: 290px;
+    min-width: 270px;
   }
   #shop .category-title {
     font-size: 12px;
@@ -816,6 +837,12 @@
   </div>
   <div class="shop-title">QUARTERMASTER</div>
   <div class="shop-subtitle">EQUIP FOR NEXT MISSION</div>
+  <!-- Brians skib indefra: medtaget pixel-art (samme fil-undtagelse som portraetterne).
+       Naar de rene/opgraderede varianter leveres byttes src'en alt efter koebt rengoering. -->
+  <img class="cockpit-pic" id="cockpitPic"
+       src="Brian's_cockpit_empty_shelves_202605310048.jpeg"
+       alt="Brian's cockpit — shabby, empty shelves">
+  <div class="cockpit-caption">YOUR SHIP &mdash; THE DRIFTER</div>
   <div class="shop-categories">
     <div class="category">
       <div class="category-title">SPACECRAFT</div>
@@ -833,6 +860,38 @@
       <div class="item" data-item="weapon-rl" data-cost="30" data-slot="weapon">
         <span class="item-name">Rocket Launcher</span>
         <span class="item-cost">30 <span class="coin-pip"></span></span>
+      </div>
+    </div>
+    <!-- Nye kategorier (phase 2+): kosmetiske/komfort-opgraderinger til rummet.
+         Items matcher detaljer i billedet (hylder, knagerække, tekøkken/vask). -->
+    <div class="category">
+      <div class="category-title">ACCESSORIES</div>
+      <div class="item" data-item="acc-shelves" data-cost="20" data-slot="accessory">
+        <span class="item-name">Storage Shelves</span>
+        <span class="item-cost">20 <span class="coin-pip"></span></span>
+      </div>
+      <div class="item" data-item="acc-teakit" data-cost="35" data-slot="accessory">
+        <span class="item-name">Tea Kitchen Kit</span>
+        <span class="item-cost">35 <span class="coin-pip"></span></span>
+      </div>
+      <div class="item" data-item="acc-hanger" data-cost="5" data-slot="accessory">
+        <span class="item-name">Coat Hanger</span>
+        <span class="item-cost">5 <span class="coin-pip"></span></span>
+      </div>
+    </div>
+    <div class="category">
+      <div class="category-title">CLEANING SERVICES</div>
+      <div class="item" data-item="clean-cockpit" data-cost="40" data-slot="cleaning">
+        <span class="item-name">Cockpit Scrub-Down</span>
+        <span class="item-cost">40 <span class="coin-pip"></span></span>
+      </div>
+      <div class="item" data-item="clean-wc" data-cost="20" data-slot="cleaning">
+        <span class="item-name">WC Sanitation</span>
+        <span class="item-cost">20 <span class="coin-pip"></span></span>
+      </div>
+      <div class="item" data-item="clean-hull" data-cost="60" data-slot="cleaning">
+        <span class="item-name">Hull Polish</span>
+        <span class="item-cost">60 <span class="coin-pip"></span></span>
       </div>
     </div>
   </div>
@@ -1019,7 +1078,11 @@ let ambushWon = false;
 let ambushInputReady = false;
 // Spillerens mønter og ejede items. Nulstilles ved hvert shop-besoeg (placeholder for phase 2 trin 1).
 let coins = 100;
-let owned = { ship: null, weapons: [] };
+// ship: enkelt-slot (ét skib ad gangen). De øvrige er multi-slots (lister) — man
+// kan eje flere vaaben/tilbehoer/rengoeringer samtidig. SLOT_LISTS mapper et items
+// data-slot til den liste det havner i, saa buyItem kan haandtere dem generisk.
+let owned = { ship: null, weapons: [], accessories: [], cleaning: [] };
+const SLOT_LISTS = { weapon: 'weapons', accessory: 'accessories', cleaning: 'cleaning' };
 
 function playTrack(el) {
   el.currentTime = 0;
@@ -1927,7 +1990,7 @@ function openShop() {
   ambushWinEl.classList.remove('visible');
   ambushWon = false;
   coins = 100;
-  owned = { ship: null, weapons: [] };
+  owned = { ship: null, weapons: [], accessories: [], cleaning: [] };
   updateShopUI();
   shopVisible = true;
   shopEl.classList.add('visible');
@@ -1956,18 +2019,23 @@ function buyItem(id, cost, slot) {
       return;
     }
     if (owned.ship !== null) return;   // én skib-slot ad gangen
-  } else {
-    const idx = owned.weapons.indexOf(id);
-    if (idx !== -1) {
-      owned.weapons.splice(idx, 1);
-      coins += cost;
-      updateShopUI();
-      return;
-    }
+    if (coins < cost) return;
+    owned.ship = id;
+    coins -= cost;
+    updateShopUI();
+    return;
+  }
+  // Multi-slot (weapon/accessory/cleaning): klik paa et ejet item = fortryd koeb.
+  const list = owned[SLOT_LISTS[slot]];
+  const idx = list.indexOf(id);
+  if (idx !== -1) {
+    list.splice(idx, 1);
+    coins += cost;
+    updateShopUI();
+    return;
   }
   if (coins < cost) return;
-  if (slot === 'ship') owned.ship = id;
-  else owned.weapons.push(id);
+  list.push(id);
   coins -= cost;
   updateShopUI();
 }
@@ -1978,7 +2046,7 @@ function updateShopUI() {
     const id = el.dataset.item;
     const cost = parseInt(el.dataset.cost, 10);
     const slot = el.dataset.slot;
-    const isOwned = (slot === 'ship') ? owned.ship === id : owned.weapons.includes(id);
+    const isOwned = (slot === 'ship') ? owned.ship === id : owned[SLOT_LISTS[slot]].includes(id);
     el.classList.toggle('owned', isOwned);
     el.classList.toggle('unaffordable', !isOwned && coins < cost);
   });
