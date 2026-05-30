@@ -2,6 +2,7 @@
 <html lang="da">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>STELLAR DRIFT - Phase 1</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -142,6 +143,88 @@
     margin: 0 2px;
     font-family: monospace;
     color: #aef;
+  }
+  /* --- Touch controls (kun synlige paa touch-enheder) --- */
+  #touchControls { display: none; }
+  body.touch #touchControls { display: block; }
+  body.touch #controls { display: none; }       /* skjul tastatur-hint paa touch */
+  canvas { touch-action: none; }
+  /* Joystick: en ring man holder nede og traekker fingeren i — retning + gas */
+  #joystick {
+    position: fixed;
+    left: 28px;
+    bottom: 32px;
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    background: rgba(120, 160, 230, 0.08);
+    border: 2px solid rgba(160, 200, 255, 0.28);
+    box-shadow: inset 0 0 30px rgba(80, 130, 200, 0.15);
+    z-index: 50;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #joystickKnob {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 66px;
+    height: 66px;
+    margin-left: -33px;
+    margin-top: -33px;
+    border-radius: 50%;
+    background: rgba(150, 195, 255, 0.30);
+    border: 2px solid rgba(190, 220, 255, 0.6);
+    box-shadow: 0 0 14px rgba(120, 170, 255, 0.5);
+    pointer-events: none;
+  }
+  #joystick.active #joystickKnob {
+    background: rgba(170, 210, 255, 0.45);
+  }
+  /* Sigte-joystick: spejlvendt i hoejre side, varmere farve = "vaaben" */
+  #aimstick {
+    position: fixed;
+    right: 28px;
+    bottom: 32px;
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    background: rgba(230, 150, 120, 0.07);
+    border: 2px solid rgba(255, 180, 150, 0.28);
+    box-shadow: inset 0 0 30px rgba(200, 110, 70, 0.13);
+    z-index: 50;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #aimstick .stick-icon {
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    transform: translateY(-50%);
+    text-align: center;
+    font-size: 30px;
+    color: rgba(255, 190, 160, 0.30);
+    pointer-events: none;
+  }
+  #aimstickKnob {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 66px;
+    height: 66px;
+    margin-left: -33px;
+    margin-top: -33px;
+    border-radius: 50%;
+    background: rgba(255, 175, 130, 0.30);
+    border: 2px solid rgba(255, 200, 165, 0.6);
+    box-shadow: 0 0 14px rgba(255, 140, 80, 0.5);
+    pointer-events: none;
+  }
+  #aimstick.active #aimstickKnob {
+    background: rgba(255, 190, 140, 0.5);
   }
   #phase {
     position: fixed;
@@ -589,6 +672,54 @@
   @keyframes gov-blink {
     50% { opacity: 0.25; }
   }
+  /* ======================================================================
+     MOBIL / SMAL SKAERM — skaler tekst saa den ikke flyder ud over kanten,
+     og kryb pilot-portraettet sammen (halv stoerrelse + halvt gennemsigtigt)
+     saa man kan se skibet bagved.
+     ====================================================================== */
+  @media (max-width: 600px) {
+    /* Tastatur-hintet er meningsloest paa en telefon — skjul det helt
+       (ikke kun efter foerste tryk som body.touch goer). */
+    #controls { display: none; }
+
+    /* Titelskaerm: titlen var 76px/18px letter-spacing — alt for bred til en telefon */
+    #titleScreen .title {
+      font-size: 38px;
+      letter-spacing: 6px;
+      margin-bottom: 10px;
+    }
+    #titleScreen .subtitle {
+      font-size: 11px;
+      letter-spacing: 4px;
+      margin-bottom: 20px;
+    }
+    #titleScreen .briefing {
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      line-height: 1.6;
+      padding: 0 22px;
+      margin-bottom: 26px;
+    }
+    #gameOver .title { font-size: 40px; letter-spacing: 8px; }
+    #victory .title  { font-size: 34px; letter-spacing: 7px; }
+
+    /* Pilot-portraet: halv stoerrelse + halvt gennemsigtigt */
+    #portrait {
+      width: 70px;
+      top: 12px;
+      right: 12px;
+      opacity: 0.5;
+    }
+    #portrait .label { display: none; }   /* fjern "PILOT · BRIAN" for mindre rod */
+    #portrait .frame {
+      width: 70px;
+      height: 122px;
+    }
+    #portrait .mood { font-size: 9px; letter-spacing: 1px; margin-top: 3px; }
+
+    /* Phase-label kan rykke op naar portraettet er mindre */
+    #phase { top: 150px; }
+  }
 </style>
 </head>
 <body>
@@ -631,6 +762,16 @@
   <kbd>W</kbd> / <kbd>↑</kbd> IGNITE &nbsp;·&nbsp;
   <kbd>MOUSE</kbd> AIM &nbsp;·&nbsp;
   <kbd>LMB</kbd> FIRE
+</div>
+
+<div id="touchControls">
+  <div id="joystick">
+    <div id="joystickKnob"></div>
+  </div>
+  <div id="aimstick">
+    <div id="aimstickKnob"></div>
+    <div class="stick-icon">⌖</div>
+  </div>
 </div>
 
 <div id="titleScreen" class="visible">
@@ -1362,6 +1503,166 @@ canvas.addEventListener('mousemove', e => {
 });
 canvas.addEventListener('mousedown', e => { if (e.button === 0) mouse.down = true; });
 canvas.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
+
+// ============================================================================
+// TOUCH INPUT (Android/tablet) — fingeren = mus (sigt + skyd), tre knapper til
+// rotation venstre/hoejre + thrust. Touch driver de samme `keys`/`mouse`-state
+// som tastatur/mus, saa al spil-logik er uaendret.
+// ============================================================================
+
+// Foerste touch nogensinde aktiverer touch-mode (afsloerer knapperne, skjuler
+// tastatur-hintet). Mus/tastatur-brugere ser intet til touch-UI'et.
+let touchModeOn = false;
+function enableTouchMode() {
+  if (touchModeOn) return;
+  touchModeOn = true;
+  document.body.classList.add('touch');
+}
+
+// Er en overlay-skaerm fremme? Saa skal canvas-touch hverken sigte eller skyde.
+function overlayActive() {
+  return titleVisible || victoryVisible || shopVisible ||
+         cutsceneVisible || familyCutsceneVisible || ambushWon || !player.alive;
+}
+
+// Spejler keydown-handlerens "tryk for at fortsaette"-logik for touch. Returnerer
+// true hvis touchen blev brugt til at avancere en overlay (saa undgaar vi at
+// preventDefault'e paa shop/skip-knapper der selv haandterer 'click').
+function advanceOverlayOnTouch() {
+  if (titleVisible)        { startGameFromTitle(); return true; }
+  if (victoryVisible)      { openShop(); return true; }
+  if (ambushWon)           { if (ambushInputReady) startFamilyCutscene(); return true; }
+  if (familyCutsceneVisible) return false;  // kun skip-knappen (DOM 'click')
+  if (shopVisible)           return false;  // shoppen styres af DOM-knapper
+  if (cutsceneVisible)     { cutsceneEl.classList.remove('visible'); cutsceneVisible = false; restartGame(); return true; }
+  if (!player.alive)       { restartGame(); return true; }
+  return false;
+}
+
+window.addEventListener('touchstart', e => {
+  enableTouchMode();
+  if (advanceOverlayOnTouch()) e.preventDefault();
+}, { passive: false });
+
+// --- Sigte-joystick (touch): MANUEL fyring. Mens man holder, foelger taarnet
+// retningen (sigte-feedback) — men der skydes IKKE. Hvert nyt tryk i en retning
+// affyrer ÉT skud (rakets 3-burst / ét MG-skud), og taarnet snapper til
+// tryk-retningen saa skuddet rammer praecis dér. mouse.x/y saettes hver frame i
+// update-loopet ud fra skibets position, saa retningen er stabil mens man driver. ---
+const aimstick = { active: false, angle: 0, mag: 0 };
+const aimEl = document.getElementById('aimstick');
+const aimKnob = document.getElementById('aimstickKnob');
+let aimCenter = { x: 0, y: 0 }, aimRadius = 1, aimTouchId = null;
+let touchFireRequest = false;   // kant-flag: saettes ved tryk, forbruges af fyrings-koden
+
+function aimUpdate(t) {
+  const dx = t.clientX - aimCenter.x;
+  const dy = t.clientY - aimCenter.y;
+  const dist = Math.hypot(dx, dy);
+  const clamped = Math.min(dist, aimRadius);
+  const kx = dist > 0 ? (dx / dist) * clamped : 0;
+  const ky = dist > 0 ? (dy / dist) * clamped : 0;
+  aimKnob.style.transform = `translate(${kx}px, ${ky}px)`;
+  aimstick.angle = Math.atan2(dy, dx);
+  const norm = clamped / aimRadius;
+  aimstick.mag = norm < JOY_DEADZONE ? 0 : (norm - JOY_DEADZONE) / (1 - JOY_DEADZONE);
+}
+function aimReset() {
+  aimstick.active = false;
+  aimstick.mag = 0;
+  aimTouchId = null;
+  aimEl.classList.remove('active');
+  aimKnob.style.transform = 'translate(0px, 0px)';
+}
+aimEl.addEventListener('touchstart', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  enableTouchMode();
+  const rect = aimEl.getBoundingClientRect();
+  aimCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  aimRadius = rect.width / 2;
+  const t = e.changedTouches[0];
+  aimTouchId = t.identifier;
+  aimstick.active = true;
+  aimEl.classList.add('active');
+  aimUpdate(t);
+  // Manuelt tryk = ét skud. Snap taarnet til tryk-retningen saa skuddet
+  // rammer dér, hvor man trykkede (uden at vente paa taarnets rotation).
+  if (aimstick.mag > 0 && !overlayActive() && player.alive) {
+    player.turretAngle = aimstick.angle;
+    touchFireRequest = true;
+  }
+}, { passive: false });
+aimEl.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === aimTouchId) { aimUpdate(t); break; }
+  }
+}, { passive: false });
+function aimEnd(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === aimTouchId) { aimReset(); break; }
+  }
+}
+aimEl.addEventListener('touchend', aimEnd, { passive: false });
+aimEl.addEventListener('touchcancel', aimEnd, { passive: false });
+
+// --- Joystick: hold nede og traek fingeren for at styre retning + gas (analog) ---
+// Vektoren fra joystickets centrum til fingeren = den retning skibet accelererer;
+// afstanden (0..1) = hvor kraftig gas. Driver de samme thrusterAngle/throttle som
+// tastaturet, saa fysik, flamme og thruster-disc er fuldstaendig uaendret.
+const joystick = { active: false, angle: 0, mag: 0 };
+const joyEl = document.getElementById('joystick');
+const joyKnob = document.getElementById('joystickKnob');
+const JOY_DEADZONE = 0.16;   // andel af radius foer input taeller (undgaar drift/skaelven)
+let joyCenter = { x: 0, y: 0 }, joyRadius = 1, joyTouchId = null;
+
+function joyUpdate(t) {
+  const dx = t.clientX - joyCenter.x;
+  const dy = t.clientY - joyCenter.y;
+  const dist = Math.hypot(dx, dy);
+  const clamped = Math.min(dist, joyRadius);
+  // Visuel knop foelger fingeren, men holdes inden for ringen.
+  const kx = dist > 0 ? (dx / dist) * clamped : 0;
+  const ky = dist > 0 ? (dy / dist) * clamped : 0;
+  joyKnob.style.transform = `translate(${kx}px, ${ky}px)`;
+  joystick.angle = Math.atan2(dy, dx);
+  const norm = clamped / joyRadius;
+  joystick.mag = norm < JOY_DEADZONE ? 0 : (norm - JOY_DEADZONE) / (1 - JOY_DEADZONE);
+}
+function joyReset() {
+  joystick.active = false;
+  joystick.mag = 0;
+  joyTouchId = null;
+  joyEl.classList.remove('active');
+  joyKnob.style.transform = 'translate(0px, 0px)';
+}
+joyEl.addEventListener('touchstart', e => {
+  e.preventDefault();
+  e.stopPropagation();   // window-listeneren skal ikke ogsaa reagere
+  enableTouchMode();
+  const rect = joyEl.getBoundingClientRect();
+  joyCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  joyRadius = rect.width / 2;
+  const t = e.changedTouches[0];
+  joyTouchId = t.identifier;
+  joystick.active = true;
+  joyEl.classList.add('active');
+  joyUpdate(t);
+}, { passive: false });
+joyEl.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === joyTouchId) { joyUpdate(t); break; }
+  }
+}, { passive: false });
+function joyEnd(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joyTouchId) { joyReset(); break; }
+  }
+}
+joyEl.addEventListener('touchend', joyEnd, { passive: false });
+joyEl.addEventListener('touchcancel', joyEnd, { passive: false });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 // ============================================================================
@@ -1983,6 +2284,12 @@ function update(now) {
     }
   } else if (player.alive) {
   // --- Player aiming: turret rotates fast toward mouse, ship stays fixed ---
+  // Sigte-joystick (touch): projicér et "mus"-punkt i skub-retningen ud fra
+  // skibets aktuelle position, saa retningen er stabil mens skibet driver.
+  if (aimstick.active && aimstick.mag > 0) {
+    mouse.x = player.x + Math.cos(aimstick.angle) * 600;
+    mouse.y = player.y + Math.sin(aimstick.angle) * 600;
+  }
   const dx = mouse.x - player.x;
   const dy = mouse.y - player.y;
   const targetTurretAngle = Math.atan2(dy, dx);
@@ -2004,19 +2311,27 @@ function update(now) {
   // Left/Right arrows rotate the thruster disc directly.
   // Up arrow ignites the engine (thrust opposite to disc orientation).
   const ROTATE_SPEED = 4.16 * moodFx().thrustRot;  // mood-skaleret thruster-rotation
-  if (keys['ArrowLeft']  || keys['KeyA']) player.thrusterAngle -= ROTATE_SPEED * dtSec;
-  if (keys['ArrowRight'] || keys['KeyD']) player.thrusterAngle += ROTATE_SPEED * dtSec;
+  const joyThrust = joystick.active && joystick.mag > 0;
+  if (joyThrust) {
+    // Joystick (touch): retningen man trykker = retningen skibet accelererer.
+    // accelAngle = thrusterAngle + PI, saa thrusterAngle = push-retning + PI
+    // (flammen peger modsat push-retningen — fysisk korrekt).
+    player.thrusterAngle = joystick.angle + Math.PI;
+  } else {
+    if (keys['ArrowLeft']  || keys['KeyA']) player.thrusterAngle -= ROTATE_SPEED * dtSec;
+    if (keys['ArrowRight'] || keys['KeyD']) player.thrusterAngle += ROTATE_SPEED * dtSec;
+  }
   // Normalize
   while (player.thrusterAngle > Math.PI) player.thrusterAngle -= Math.PI * 2;
   while (player.thrusterAngle < -Math.PI) player.thrusterAngle += Math.PI * 2;
 
   const wasInput = player.hasInput;
-  player.hasInput = !!(keys['ArrowUp'] || keys['KeyW']);
+  player.hasInput = joyThrust || !!(keys['ArrowUp'] || keys['KeyW']);
   if (player.hasInput && !wasInput) startThrust();
   else if (!player.hasInput && wasInput) stopThrust();
 
-  // Throttle ramps up while ArrowUp is held, down when released
-  const throttleTarget = player.hasInput ? 1 : 0;
+  // Throttle: joystick giver analog gas (afstand fra centrum), tastatur = fuld gas.
+  const throttleTarget = joyThrust ? Math.min(1, joystick.mag) : (player.hasInput ? 1 : 0);
   if (throttleTarget > player.throttle) {
     player.throttle += dtSec * 4;     // ignite over ~0.25s
     if (player.throttle > throttleTarget) player.throttle = throttleTarget;
@@ -2060,14 +2375,23 @@ function update(now) {
   // MG: kontinuerlig fyring, ~90ms imellem skud (ca 11 rps), med overheat-bar.
   if (player.fireCooldown > 0) player.fireCooldown -= dt;
   const rof = moodFx().rof;
+  // Fyrings-trigger:
+  //  • Desktop: museknap holdt nede = fyr (uaendret).
+  //  • Touch + raket: ét skud pr. tryk (kant-flag) — bevidste enkeltskud.
+  //  • Touch + maskingevaer: hold sigte-joysticken nede (+ retning) = autofire,
+  //    ligesom paa PC. MG'et har sin egen overheat-bar, saa hold-fyring passer.
+  const mgHeld = aimstick.active && aimstick.mag > 0;   // sigte-joysticken holdes nede
+  const trigger = touchModeOn
+    ? (equippedWeapon === 'weapon-mg' ? mgHeld : touchFireRequest)
+    : mouse.down;
   if (equippedWeapon === 'weapon-mg') {
     // Heat-dynamik: stiger 1/3 per sekund mens man fyrer (fuld paa 3s),
     // falder 2/3 per sekund naar man ikke fyrer (tom paa 1.5s). Locked ved
     // 100%, unlocked igen naar heat er nul.
     // Angry-sticky: én tryk og maskingevaeret fyrer indtil overophedet.
-    if (mouse.down && brianMood === 'Angry') mgStuckFire = true;
+    if (trigger && brianMood === 'Angry') mgStuckFire = true;
     if (player.overheated) mgStuckFire = false;
-    const triggerHeld = mouse.down || (brianMood === 'Angry' && mgStuckFire);
+    const triggerHeld = trigger || (brianMood === 'Angry' && mgStuckFire);
     const wantFire = triggerHeld && !player.overheated;
     if (wantFire) {
       player.heat += dtSec / 3;
@@ -2094,7 +2418,7 @@ function update(now) {
     if (player.magazine === 0 && player.fireCooldown <= 0) {
       player.magazine = 3;
     }
-    if (mouse.down && player.fireCooldown <= 0 && player.magazine > 0) {
+    if (trigger && player.fireCooldown <= 0 && player.magazine > 0) {
       // Angry: trigger "fastholdes" → fireMult raketter pr. klik (clamped til magasin).
       const burst = Math.min(moodFx().fireMult, player.magazine);
       for (let k = 0; k < burst; k++) {
@@ -2109,6 +2433,9 @@ function update(now) {
       }
     }
   }
+  // Kant-flaget forbruges hver frame: ét tryk = max ét skud, ingen autofire.
+  // (Angry-sticky lever videre i mgStuckFire, saa raserifyring stadig virker.)
+  touchFireRequest = false;
   }  // end: dying / alive dispatch
 
   // --- Update bullets ---
