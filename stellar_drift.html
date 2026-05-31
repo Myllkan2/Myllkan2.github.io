@@ -607,6 +607,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 16px;                    /* luft mellem lange varenavne og prisen */
     padding: 14px 18px;
     margin-bottom: 10px;
     border: 1px solid rgba(120, 150, 200, 0.22);
@@ -836,7 +837,7 @@
       <circle cx="14" cy="14" r="12" fill="url(#coinGrad)" stroke="#3d2a08" stroke-width="0.8"/>
       <circle cx="14" cy="14" r="9" fill="none" stroke="rgba(60,40,5,0.45)" stroke-width="0.6"/>
     </svg>
-    <span id="coinAmount">100</span>
+    <span id="coinAmount">1050</span>
   </div>
   <div class="shop-title">QUARTERMASTER</div>
   <div class="shop-subtitle">EQUIP FOR NEXT MISSION</div>
@@ -849,20 +850,20 @@
   <div class="shop-categories">
     <div class="category">
       <div class="category-title">SPACECRAFT</div>
-      <div class="item" data-item="ship-tiny" data-cost="80" data-slot="ship">
-        <span class="item-name">Tiny Spaceship</span>
-        <span class="item-cost">80 <span class="coin-pip"></span></span>
+      <div class="item" data-item="ship-tiny" data-cost="800" data-slot="ship">
+        <span class="item-name">Tiny Second-Hand Spaceship</span>
+        <span class="item-cost">800 <span class="coin-pip"></span></span>
       </div>
     </div>
     <div class="category">
       <div class="category-title">WEAPONS</div>
-      <div class="item" data-item="weapon-mg" data-cost="10" data-slot="weapon">
-        <span class="item-name">Machine Gun</span>
-        <span class="item-cost">10 <span class="coin-pip"></span></span>
+      <div class="item" data-item="weapon-mg" data-cost="250" data-slot="weapon">
+        <span class="item-name">Rented Machine Gun</span>
+        <span class="item-cost">250 <span class="coin-pip"></span></span>
       </div>
-      <div class="item" data-item="weapon-rl" data-cost="30" data-slot="weapon">
+      <div class="item" data-item="weapon-rl" data-cost="600" data-slot="weapon">
         <span class="item-name">Rocket Launcher</span>
-        <span class="item-cost">30 <span class="coin-pip"></span></span>
+        <span class="item-cost">600 <span class="coin-pip"></span></span>
       </div>
     </div>
     <!-- Nye kategorier (phase 2+): kosmetiske/komfort-opgraderinger til rummet.
@@ -1096,7 +1097,7 @@ let ambushWon = false;
 // overlayet, foer spilleren har naaet at se flugten + laese noten.
 let ambushInputReady = false;
 // Spillerens mønter og ejede items. Nulstilles ved hvert shop-besoeg (placeholder for phase 2 trin 1).
-let coins = 100;
+let coins = 1050;
 // ship: enkelt-slot (ét skib ad gangen). De øvrige er multi-slots (lister) — man
 // kan eje flere vaaben/tilbehoer/rengoeringer samtidig. SLOT_LISTS mapper et items
 // data-slot til den liste det havner i, saa buyItem kan haandtere dem generisk.
@@ -2008,7 +2009,7 @@ function openShop() {
   victoryVisible = false;
   ambushWinEl.classList.remove('visible');
   ambushWon = false;
-  coins = 100;
+  coins = 1050;
   owned = { ship: null, weapons: [], accessories: [], cleaning: [] };
   updateShopUI();
   shopVisible = true;
