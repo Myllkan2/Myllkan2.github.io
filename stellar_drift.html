@@ -455,6 +455,15 @@
     margin-bottom: 32px;
   }
   #ambushWin .bounty .coin-pip { width: 14px; height: 14px; }
+  /* Leje-udloeb: dæmpet advarsels-toning, adskilt fra den gyldne dusør. */
+  #ambushWin .expired {
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: rgba(232, 150, 130, 0.85);
+    text-shadow: 0 0 14px rgba(200, 90, 70, 0.3);
+    margin-bottom: 30px;
+  }
+  #ambushWin .expired:empty { display: none; }   /* ingen plads naar der intet er at vise */
   #ambushWin .prompt {
     font-size: 12px;
     letter-spacing: 4px;
@@ -948,6 +957,7 @@
     On an open channel the captain mutters — bitter, exhausted: <em>"This one isn't worth the catch."</em>
   </div>
   <div class="bounty" id="ambushBounty"></div>
+  <div class="expired" id="ambushExpired"></div>
   <div class="prompt">PRESS ANY KEY TO CONTINUE</div>
 </div>
 
@@ -986,6 +996,7 @@ const shopLaunchHintEl = document.getElementById('shopLaunchHint');
 const cutsceneEl = document.getElementById('cutscene');
 const ambushWinEl = document.getElementById('ambushWin');
 const ambushBountyEl = document.getElementById('ambushBounty');
+const ambushExpiredEl = document.getElementById('ambushExpired');
 const familyCutsceneEl = document.getElementById('familyCutscene');
 const familyCutsceneVideo = document.getElementById('familyCutsceneVideo');
 const familyCutsceneSubtitleEl = document.getElementById('familyCutsceneSubtitle');
@@ -2284,6 +2295,16 @@ function triggerAmbushWin() {
   const bounty = BOUNTY_PER_KILL * pirateKills;
   coins += bounty;
   ambushBountyEl.innerHTML = 'BOUNTY COLLECTED &nbsp; +' + bounty + ' <span class="coin-pip"></span>';
+  // Lejet maskingevær var kun til denne ene kamp — det udløber nu. Skib + købte
+  // (ikke-lejede) våben som Rocket Launcher bevares. Vi fjerner det fra ejerlisten
+  // saa shoppen bagefter viser spilleren som våbenløs, og giver en kort besked.
+  if (owned.weapons.includes('weapon-mg')) {
+    owned.weapons = owned.weapons.filter(w => w !== 'weapon-mg');
+    if (equippedWeapon === 'weapon-mg') equippedWeapon = 'default';
+    ambushExpiredEl.textContent = 'RENTED MACHINE GUN EXPIRED';
+  } else {
+    ambushExpiredEl.textContent = '';
+  }
   ambushWinEl.classList.add('visible');
   // Cap levetiden paa eksisterende fjende-raketter saa de blaeser ud inden for
   // et sekund — de er nu harmloese, men skal heller ikke svaeve i evig tid.
