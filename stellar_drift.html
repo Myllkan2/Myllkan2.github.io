@@ -568,12 +568,15 @@
      som Brian-portraetterne. Vises som "dette er dit skib" oeverst i shoppen;
      opgraderinger/rengoering byttes ind senere naar de rene varianter er klar. */
   #shop .cockpit-pic {
+    display: block;
     width: min(720px, 78vw);
+    height: auto;                 /* canvas holder 1376x768-forholdet automatisk */
     border: 1px solid rgba(120, 150, 200, 0.35);
     border-radius: 4px;
     box-shadow: 0 0 32px rgba(20, 45, 90, 0.55), inset 0 0 40px rgba(0,0,0,0.45);
     image-rendering: pixelated;   /* pixel art — behold skarpe kanter ved skalering */
     margin-bottom: 12px;
+    transition: filter 0.35s ease; /* blødt skift naar lys-opgraderingen tændes */
   }
   #shop .cockpit-caption {
     font-size: 10px;
@@ -837,11 +840,11 @@
   </div>
   <div class="shop-title">QUARTERMASTER</div>
   <div class="shop-subtitle">EQUIP FOR NEXT MISSION</div>
-  <!-- Brians skib indefra: medtaget pixel-art (samme fil-undtagelse som portraetterne).
-       Naar de rene/opgraderede varianter leveres byttes src'en alt efter koebt rengoering. -->
-  <img class="cockpit-pic" id="cockpitPic"
-       src="Brian's_cockpit_empty_shelves_202605310048.jpeg"
-       alt="Brian's cockpit — shabby, empty shelves">
+  <!-- Brians skib indefra: pixel-art (samme fil-undtagelse som portraetterne).
+       Tegnes som lag paa et canvas — grundbilledet i bunden, koebte opgraderinger
+       males ovenpaa via bagte celle-masker. Se renderCockpit() i scriptet. -->
+  <canvas class="cockpit-pic" id="cockpitCanvas" width="1376" height="768"
+          aria-label="Brian's cockpit — your ship, The Drifter"></canvas>
   <div class="cockpit-caption">YOUR SHIP &mdash; THE DRIFTER</div>
   <div class="shop-categories">
     <div class="category">
@@ -878,6 +881,14 @@
         <span class="item-name">Coat Hanger</span>
         <span class="item-cost">5 <span class="coin-pip"></span></span>
       </div>
+      <div class="item" data-item="acc-seat" data-cost="15" data-slot="accessory">
+        <span class="item-name">Pilot Seat</span>
+        <span class="item-cost">15 <span class="coin-pip"></span></span>
+      </div>
+      <div class="item" data-item="acc-lighting" data-cost="25" data-slot="accessory">
+        <span class="item-name">Lighting Rig</span>
+        <span class="item-cost">25 <span class="coin-pip"></span></span>
+      </div>
     </div>
     <div class="category">
       <div class="category-title">CLEANING SERVICES</div>
@@ -892,6 +903,14 @@
       <div class="item" data-item="clean-hull" data-cost="60" data-slot="cleaning">
         <span class="item-name">Hull Polish</span>
         <span class="item-cost">60 <span class="coin-pip"></span></span>
+      </div>
+      <div class="item" data-item="clean-floor" data-cost="15" data-slot="cleaning">
+        <span class="item-name">Floor Scrub</span>
+        <span class="item-cost">15 <span class="coin-pip"></span></span>
+      </div>
+      <div class="item" data-item="clean-window" data-cost="10" data-slot="cleaning">
+        <span class="item-name">Window Polish</span>
+        <span class="item-cost">10 <span class="coin-pip"></span></span>
       </div>
     </div>
   </div>
@@ -2059,6 +2078,7 @@ function updateShopUI() {
   else if (!hasShip && !hasWeapon) shopLaunchHintEl.textContent = 'REQUIRES 1 SPACECRAFT + 1 WEAPON';
   else if (!hasShip) shopLaunchHintEl.textContent = 'SELECT A SPACECRAFT';
   else shopLaunchHintEl.textContent = 'SELECT A WEAPON';
+  renderCockpit();   // billedet afspejler altid de ejede opgraderinger
 }
 
 // Item-klik = køb. Bemærk: brug 'click' (ikke mousedown) saa man slipper for
@@ -2090,6 +2110,111 @@ shopLaunchBtn.addEventListener('click', () => {
   // (gameMusic starter naar selve kampen begynder via restartGame.)
   stopTravelMusic();
 });
+
+// ============================================================================
+// COCKPIT-BILLEDE: lag-baseret opgraderingsvisning (phase 2)
+// ----------------------------------------------------------------------------
+// Hver opgradering er et fuldt 1376x768 billede der KUN adskiller sig fra
+// grundbilledet i sit eget omraade. Vi tegner en baggrund (grundbilledet, eller
+// den rene-vaeg-variant hvis Hull Polish er koebt) paa et canvas og maler
+// derefter hver ejet opgradering ovenpaa — men kun dens aendrede celler via en
+// bagt maske, saa intet snavs fra de andre billeder siver igennem.
+//
+// Maskerne er 1 bit pr. celle (16px celler, 86x48 grid), genereret ud fra en
+// pixel-diff mod grundbilledet og pakket som base64. drawImage tainter ikke
+// canvas'et, saa det virker ogsaa naar spillet aabnes som fil (file://) —
+// i modsaetning til getImageData.
+// ============================================================================
+const COCKPIT_BASE  = "Brian's_cockpit_empty_shelves_202605310048.jpeg";
+const COCKPIT_WALLS = 'drifter_clean_walls.jpeg';   // Hull Polish: hel ren-vaeg baggrund
+const COCKPIT_GRID  = { cols: 86, rows: 48, cell: 16 };
+
+// Tegne-raekkefoelge for de lokale lag (nederst -> oeverst) + hvilket shop-item
+// hvert lag hoerer til. Lys (acc-lighting) og vaeg (clean-hull) haandteres
+// saerskilt nedenfor og staar derfor ikke her.
+const COCKPIT_LAYERS = [
+  { file: 'drifter_clean_floor.jpeg',   item: 'clean-floor'   },
+  { file: 'drifter_clean_cockpit.jpeg', item: 'clean-cockpit' },
+  { file: 'drifter_acc_seat.jpeg',      item: 'acc-seat'      },
+  { file: 'drifter_clean_window.jpeg',  item: 'clean-window'  },
+  { file: 'drifter_acc_shelves.jpeg',   item: 'acc-shelves'   },
+  { file: 'drifter_acc_hanger.jpeg',    item: 'acc-hanger'    },
+  { file: 'drifter_acc_teakit.jpeg',    item: 'acc-teakit'    },
+  { file: 'drifter_clean_wc.jpeg',      item: 'clean-wc'      },
+];
+
+const COCKPIT_MASKS = {
+  'drifter_clean_floor.jpeg':   'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwAAAAAAAAAAAAABwAAAAAAAAAAAAABwAAAAAAAAAAAAAAAAAAAAAAADwAAAAAAAAAAAAADwAAAAAAAAAAAMADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADgAAAAAAAAAAAAADjAAwA4AAAAAAAADvAAAA7gAAAAAAAAPACAAzgAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHAAAAAAAAB4vwMAHAAAAIAH4P7vgAMHAAAA8AH//z/gAAAAAMB//////z8AAAAA8P//////DwAAAAD///////8DAAAA4P///////wEAAAD4//////9/AAAAAP77/////x8AAAAAHuA+4Af8BwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+  'drifter_clean_cockpit.jpeg': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD///8DAAAAAAAAwP///wAAAAAAAADw//9/AAAAAAAAAPz//x8AAAAAAAAA/v//BwAAAAAAAAD4//8BAAAAAAAAAPD/fwAAAAAAAAAAfuAfAAAAAAAAAIAf+AcAAAAAAAAA8AP/AQAAAAAAAAD8wH8AAAAAAAAAgB/wHwAAAAAAAADgB9wHAAAAAAAAAPz/9wEAAAAAAADw//9/AAAAAAAAAPz//x8AAAAAAAAA////BwAAAAAAAMD7//cBAAAAAAAA8P3/fQAAAAAAAAD4/z8fAAAAAAAAAP//3wcAAAAAAADA///3AQAAAAAAAPD//z0AAAAAAAAA/P8/DwAAAAAAAAD//+8DAAAAAAAAwP//+wAAAAAAAADw/n8+AAAAAAAAAJz/vw8AAAAAAAAA5///AwAAAAAAAMD9//8AAAAAAAAA8P//PwAAAAAAAAD8//8PAAAAAAAAAP///wEAAAAAAADA//8/AAAAAAAAAPD//wcAAAAAAAAA/P//AAAAAAAAAAD//x8AAAAAAAAAwP//AwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+  'drifter_acc_seat.jpeg':      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+AAAAAAAAAAAAAA+AAAAAAAAAAAAgA8AAAAAAAAAAADAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIADAAAAAAAAAAAA8AcAAAAAAAAAAAD8AQAAAAAAAAAA4H8AAAAAAAAAAAA4AAAAAAAAAAAAAA4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAcAAAAAAAAAAADA4QEAAAAAAAAAAAB4AAAAAAAAAAAAAB4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+  'drifter_clean_window.jpeg':  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwAwAAAAAAAAAAAPwPAAAAAAAAAAAA//8fAAAAAAAAAAD8/w8AAAAAAAAAAPj/AwAAAAAAAAAAfuAAAAAAAAAAAIAfOAAAAAAAAAAA8AMPAAAAAAAAAAD+wAMAAAAAAAAAgB/wAAAAAAAAAADwBxwAAAAAAAAAAP4ABwAAAAAAAACAP8ADAAAAAAAAAOAP8AAAAAAAAAAAAAA+AAAAAAAAAAAA4AcAAAAAAAAAAAD4AQAAAAAAAAAAAD4AAAAAAAAAAAAADgAAAAAAAAAAAIADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+  'drifter_acc_shelves.jpeg':   'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA8P//AQAAAAAAAAD8/38AAAAAAAAAAP//HwAAAAAAAADA//8HAAAAAAAAAPD//wEAAAAAAAAA/P9/AAAAAAAAAAD//x8AAAAAAAAAwP//BwAAAAAAAADw//9/AAAAAAAAAPz//z8AAAAAAAAA////DwAAAAAAAMD///8DAAAAAAAA8P///wAAAAAAAAD8//8/AAAAAAAAAP///w94AAAAAADA////+38AAAAAAPD////+HwAAAAAA/P9/gP8HAAAAAAD//x/w/wEAAAAAwP//B/x/AAAAAADw//8B/x8AAAAAAPz/f8D/BwAAAAAA//8f4P8BAAAAAMD//wf4fwAAAAAA8P//Af4fAAAAAAAcAACA/wcAAAAAAAAAAMAfAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+  'drifter_acc_hanger.jpeg':    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwAAAAAAAAAAADAPwAAAAAAAAAAAPgfAAAAAAAAAAAA/gcAAAAAAAAAAID/AQAAAAAAAAAA4P8AAAAAAAAAAAD4PwAAAAAAAAAAAP4PAAAAAAAAAACA/wMAAAAAAAAAAOD/AAAAAAAAAAAA+D8AAAAAAAAAAAD+DwAAAAAAAAAAgP8DAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+  'drifter_acc_teakit.jpeg':    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgH8AAAAAAAAAAADgHwAAAAAAADwAAPgHAAAAAAAADwAA/gEAAAAAAMADAID/AQAAAAAAAADgAfgAAAAAAAAAAPh8PwAAAAAAAAAA/v8PAAAAAADgAMD//wcAAAAAADjA+///AQAAAAAADvD+/3/gAAAAAAAAvP//HzgAAAAAAADg//8HDgAAAAAAAPj//wEAAAAAAAAA/v9/AAAAAAAAAID//x8AAAAAAAAAwP//B3AAAAAAAAD4//8AHAAAAAAAAP7/fwAHAAAAAACA//8fAAAAAAAAAOD//wcAAAAAAAAA8H/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+  'drifter_clean_wc.jpeg':      'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/P8BAAAAAAAAAID/fwAAAAAAAAAA4P8fAAAAAAAAAAD4/wcAAAAAAAAAAP7/AQAAAAAAAACA/38AAAAAAAAAAOD/HwAAAAAAAAAA+P8HAAAAAAAAAAD+/wEAAAAAAAAAgP9/AAAAAAAAAADg/x8AAAAAAAAAAPj/BwAAAAAAAAAA/v8BAAAAAAAAAID/fwAAAAAAAAAA4P8fAAAAAAAAAAD4/wcAAAAAAAAAAP7/AQAAAAAAAACA/38AAAAAAAAAAOD/HwAAAAAAAAAA+P8HAAAAAAAAAAD+/wEAAAAAAAAAgP9/AAAAAAAAAADg/x8AAAAAAAAAAPj/BwAAAAAAAAAA/v8BAAAAAAAAAID/fwAAAAAAAAAA4P8fAAAAAAAAAAD4/wcAAAAAAAAAAP7/AQAAAAAAAACA/38AAAAAAAAAAOD/HwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+};
+
+const cockpitCanvas = document.getElementById('cockpitCanvas');
+const cockpitCtx = cockpitCanvas.getContext('2d');
+cockpitCtx.imageSmoothingEnabled = false;   // skarp pixel art ved nedskalering
+
+// Preload billeder + afkod masker een gang. Naar et billede lander gen-tegner
+// vi (hvis shoppen er aaben) saa intet mangler hvis det loadede efter foerste render.
+const cockpitImgs = {};
+const cockpitMaskBits = {};
+(function preloadCockpit() {
+  const files = [COCKPIT_BASE, COCKPIT_WALLS, ...COCKPIT_LAYERS.map(l => l.file)];
+  for (const f of files) {
+    const im = new Image();
+    im.onload = () => { if (shopVisible) renderCockpit(); };
+    im.src = f;
+    cockpitImgs[f] = im;
+  }
+  for (const f in COCKPIT_MASKS) {
+    const bin = atob(COCKPIT_MASKS[f]);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    cockpitMaskBits[f] = bytes;
+  }
+})();
+
+// Ejer spilleren denne opgradering? (tilbehoer + rengoering — skib taeller ikke).
+function ownsUpgrade(id) {
+  return owned.accessories.includes(id) || owned.cleaning.includes(id);
+}
+
+// Maler kun de maskerede celler af ét lag-billede ovenpaa canvas'et.
+function drawCockpitLayer(file) {
+  const im = cockpitImgs[file];
+  const bits = cockpitMaskBits[file];
+  if (!im || !im.complete || !im.naturalWidth || !bits) return;
+  const { cols, rows, cell } = COCKPIT_GRID;
+  const W = cockpitCanvas.width, H = cockpitCanvas.height;
+  for (let k = 0; k < cols * rows; k++) {
+    if (!(bits[k >> 3] & (1 << (k & 7)))) continue;   // celle ikke aendret -> spring over
+    const cx = k % cols, cy = (k / cols) | 0;
+    const x = cx * cell, y = cy * cell;
+    const w = Math.min(cell, W - x), h = Math.min(cell, H - y);
+    cockpitCtx.drawImage(im, x, y, w, h, x, y, w, h);
+  }
+}
+
+// Bygger hele billedet op nedefra ud fra de ejede opgraderinger.
+function renderCockpit() {
+  const W = cockpitCanvas.width, H = cockpitCanvas.height;
+  cockpitCtx.clearRect(0, 0, W, H);
+  // Baggrund: ren vaeg hvis Hull Polish er koebt, ellers det lurvede grundbillede.
+  const bg = cockpitImgs[owned.cleaning.includes('clean-hull') ? COCKPIT_WALLS : COCKPIT_BASE];
+  if (bg && bg.complete && bg.naturalWidth) cockpitCtx.drawImage(bg, 0, 0, W, H);
+  // Lokale opgraderinger ovenpaa, i fast raekkefoelge.
+  for (const layer of COCKPIT_LAYERS) {
+    if (ownsUpgrade(layer.item)) drawCockpitLayer(layer.file);
+  }
+  // Lys: blødt brightness/saturation-filter paa hele billedet (Lighting Rig).
+  cockpitCanvas.style.filter = owned.accessories.includes('acc-lighting')
+    ? 'brightness(1.18) saturate(1.06)'
+    : 'none';
+}
 
 // Opdaterer HULL-barometeret i HUD'en ud fra player.hits / player.maxHits.
 // Kaldes ved spawn og efter hvert hit. Farveskift: groen > 60%, gul 30-60%, roed <30%.
