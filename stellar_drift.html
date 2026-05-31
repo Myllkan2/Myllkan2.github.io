@@ -877,6 +877,18 @@
     </div>
     <div class="category">
       <div class="category-title">WEAPONS</div>
+      <!-- Spillerens egne (håbløse) våben — dukker foerst op EFTER tutorialen,
+           naar den lejede MG er udloebet. Vises/skjules i applyWeaponAvailability(). -->
+      <div class="item" data-item="weapon-rusty" data-cost="60" data-slot="weapon">
+        <span class="item-name">Old Rusty Spacegun</span>
+        <span class="item-cost">60 <span class="coin-pip"></span></span>
+      </div>
+      <div class="item" data-item="weapon-laser" data-cost="80" data-slot="weapon">
+        <span class="item-name">Weak Laser</span>
+        <span class="item-cost">80 <span class="coin-pip"></span></span>
+      </div>
+      <!-- Lejet MG: kun tilgaengelig i tutorial-fasen (smagsproeve). Skjules naar
+           den er udloebet efter bagholdet (mgRetired). -->
       <div class="item" data-item="weapon-mg" data-cost="250" data-slot="weapon">
         <span class="item-name">Rented Machine Gun</span>
         <span class="item-cost">250 <span class="coin-pip"></span></span>
@@ -1120,6 +1132,11 @@ let ambushWon = false;
 // Input-lockout: forhindrer at en tast under retreat-sekvensen straks lukker
 // overlayet, foer spilleren har naaet at se flugten + laese noten.
 let ambushInputReady = false;
+// Den lejede MG er en engangs-smagsprøve i tutorialen. Naar den udløber efter
+// bagholdet saettes mgRetired=true: MG'en forsvinder fra shoppen for altid, og
+// spillerens egne (håbløse) våben — Old Rusty Spacegun, Weak Laser — bliver i
+// stedet tilgaengelige. Styres i applyWeaponAvailability().
+let mgRetired = false;
 // Spillerens vedvarende pung + ejede items. Start-kapital 1050 (saettes her een
 // gang ved script-load). Nulstilles IKKE ved shop-besoeg — coins tjenes som dusør
 // i kamp og bruges over flere besoeg; købte skibe/items bevares.
@@ -2029,12 +2046,26 @@ function restartGame() {
 // ===== SHOP / QUARTERMASTER (phase 2 trin 1) =====================================
 // Trin 1: kun UI + mønter. Køb registreres men har endnu ingen gameplay-effekt;
 // senere phase 2-commits kobler tiny ship, hull HP og våben-typer paa.
+// Viser/skjuler våben-varer alt efter tutorial-fasen. Foer MG'en udløber er kun
+// den lejede MG (+ Rocket Launcher) tilgaengelig — smagsprøven. Bagefter forsvinder
+// MG'en og spillerens egne håbløse våben (rusty/laser) dukker op i stedet.
+function applyWeaponAvailability() {
+  const setVis = (id, vis) => {
+    const el = shopEl.querySelector('.item[data-item="' + id + '"]');
+    if (el) el.style.display = vis ? '' : 'none';
+  };
+  setVis('weapon-mg', !mgRetired);
+  setVis('weapon-rusty', mgRetired);
+  setVis('weapon-laser', mgRetired);
+}
+
 function openShop() {
   // Ryd victory/ambush-overlays foer shoppen vises.
   victoryEl.classList.remove('visible');
   victoryVisible = false;
   ambushWinEl.classList.remove('visible');
   ambushWon = false;
+  applyWeaponAvailability();
   // Coins + ejede items er nu en VEDVARENDE pung/beholdning — de nulstilles IKKE
   // ved hvert besoeg. Start-kapitalen (1050) saettes ved spil-start; dusoer fra
   // bagholdet er allerede lagt til. Det lille skib man koeber bliver derfor ejet
@@ -2128,8 +2159,11 @@ shopLaunchBtn.addEventListener('click', () => {
   // MG > RL > default. (Trin 4 introducerer faktisk weapon-switching hvis man
   // ejer flere — for nu giver MG en mere markant gameplay-aendring.)
   if (owned.ship) equippedShip = owned.ship;
-  if (owned.weapons.includes('weapon-mg'))      equippedWeapon = 'weapon-mg';
-  else if (owned.weapons.includes('weapon-rl')) equippedWeapon = 'weapon-rl';
+  // Vaelg det staerkeste ejede våben. (Kun 'weapon-mg' har distinkt mekanik endnu;
+  // resten — rl/laser/rusty — affyrer default-våbnet indtil de differentieres.)
+  const WEAPON_PRIORITY = ['weapon-mg', 'weapon-rl', 'weapon-laser', 'weapon-rusty'];
+  const eq = WEAPON_PRIORITY.find(w => owned.weapons.includes(w));
+  if (eq) equippedWeapon = eq;
   // Vis ambush-cutscenen foer kampen — spilleren trykker en tast for at engage.
   shopEl.classList.remove('visible');
   shopVisible = false;
@@ -2301,6 +2335,7 @@ function triggerAmbushWin() {
   if (owned.weapons.includes('weapon-mg')) {
     owned.weapons = owned.weapons.filter(w => w !== 'weapon-mg');
     if (equippedWeapon === 'weapon-mg') equippedWeapon = 'default';
+    mgRetired = true;   // MG kan ikke lejes igen — egne våben aabnes i shoppen
     ambushExpiredEl.textContent = 'RENTED MACHINE GUN EXPIRED';
   } else {
     ambushExpiredEl.textContent = '';
