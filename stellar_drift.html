@@ -1557,6 +1557,124 @@ function sfxBulletMetal({ volume = 1 } = {}) {
   osc.start(); osc.stop(t0 + 0.14);
 }
 
+// --- 13. Old Rusty Spacegun: tung, gammeldags revolver. Skarp transient-knald +
+// krudt-body + dyb boom-thump med pitch-drop. Engangslyd pr. skud.
+function sfxRevolver({ volume = 1 } = {}) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  // Lag 1: skarp transient (selve knaldet)
+  const crack = ctx.createBufferSource();
+  crack.buffer = getNoiseBuffer();
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 1600;
+  const cg = ctx.createGain();
+  cg.gain.setValueAtTime(0.9 * volume, t0);
+  cg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.045);
+  crack.connect(hp); hp.connect(cg); cg.connect(getSfxGain());
+  crack.start(t0); crack.stop(t0 + 0.06);
+  // Lag 2: krudt-body (low-passed noise med hurtigt fald)
+  const body = ctx.createBufferSource();
+  body.buffer = getNoiseBuffer();
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(1900, t0);
+  lp.frequency.exponentialRampToValueAtTime(420, t0 + 0.13);
+  const bg = ctx.createGain();
+  bg.gain.setValueAtTime(0.7 * volume, t0);
+  bg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.19);
+  body.connect(lp); lp.connect(bg); bg.connect(getSfxGain());
+  body.start(t0); body.stop(t0 + 0.21);
+  // Lag 3: dyb boom-thump (triangle med pitch-drop) — giver vægt/"tung revolver"
+  const osc = ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(195, t0);
+  osc.frequency.exponentialRampToValueAtTime(56, t0 + 0.14);
+  const og = ctx.createGain();
+  og.gain.setValueAtTime(0.6 * volume, t0);
+  og.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
+  osc.connect(og); og.connect(getSfxGain());
+  osc.start(t0); osc.stop(t0 + 0.22);
+}
+
+// --- 14. Weak Laser: VEDVARENDE lyde, ikke engangs. ---
+// (a) Lyssværd-hum (staaende, ingen swoosh): to detunede oscillatorer + blød
+//     tremolo/vibrato-waver gennem et lowpass. Starter/stopper med strålen.
+let laserHumNodes = null;
+function startLaserHum() {
+  if (laserHumNodes) return;
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const out = ctx.createGain();
+  out.gain.setValueAtTime(0, t);
+  out.gain.linearRampToValueAtTime(0.42, t + 0.09);   // blød "ignition"
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 1500; lp.Q.value = 0.6;
+  lp.connect(out); out.connect(getSfxGain());
+  const o1 = ctx.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 96;
+  const o2 = ctx.createOscillator(); o2.type = 'sine';     o2.frequency.value = 145;
+  const g2 = ctx.createGain(); g2.gain.value = 0.4;
+  o1.connect(lp); o2.connect(g2); g2.connect(lp);
+  // Tremolo-waver paa output (lyssværdets karakteristiske summen)
+  const trem = ctx.createOscillator(); trem.type = 'sine'; trem.frequency.value = 6;
+  const tremG = ctx.createGain(); tremG.gain.value = 0.07;
+  trem.connect(tremG); tremG.connect(out.gain);
+  // Let vibrato paa grundtonen
+  const vib = ctx.createOscillator(); vib.type = 'sine'; vib.frequency.value = 5;
+  const vibG = ctx.createGain(); vibG.gain.value = 3;
+  vib.connect(vibG); vibG.connect(o1.frequency);
+  o1.start(); o2.start(); trem.start(); vib.start();
+  laserHumNodes = { out, nodes: [o1, o2, trem, vib] };
+}
+function stopLaserHum() {
+  if (!laserHumNodes) return;
+  const ctx = getAudioCtx();
+  const { out, nodes } = laserHumNodes;
+  const t = ctx.currentTime;
+  out.gain.cancelScheduledValues(t);
+  out.gain.setValueAtTime(out.gain.value, t);
+  out.gain.linearRampToValueAtTime(0, t + 0.1);
+  for (const n of nodes) { try { n.stop(t + 0.14); } catch (e) {} }
+  laserHumNodes = null;
+}
+// (b) Svejse-lyd: let sprudlende/sydende stoej der lægges OVENPAA hum'en mens
+//     strålen rammer en fjende. Bandpasset stoej med hurtig crackle-tremolo.
+let laserWeldNodes = null;
+function startLaserWeld() {
+  if (laserWeldNodes) return;
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const out = ctx.createGain();
+  out.gain.setValueAtTime(0, t);
+  out.gain.linearRampToValueAtTime(0.2, t + 0.04);
+  const noise = ctx.createBufferSource();
+  noise.buffer = getNoiseBuffer(); noise.loop = true;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 3200; bp.Q.value = 0.8;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 1400;
+  noise.connect(bp); bp.connect(hp); hp.connect(out); out.connect(getSfxGain());
+  // Crackle: hurtig sawtooth-tremolo giver den sprudlende svejse-sitren
+  const crackle = ctx.createOscillator(); crackle.type = 'sawtooth'; crackle.frequency.value = 33;
+  const crackleG = ctx.createGain(); crackleG.gain.value = 0.13;
+  crackle.connect(crackleG); crackleG.connect(out.gain);
+  noise.start(); crackle.start();
+  laserWeldNodes = { out, nodes: [noise, crackle] };
+}
+function stopLaserWeld() {
+  if (!laserWeldNodes) return;
+  const ctx = getAudioCtx();
+  const { out, nodes } = laserWeldNodes;
+  const t = ctx.currentTime;
+  out.gain.cancelScheduledValues(t);
+  out.gain.setValueAtTime(out.gain.value, t);
+  out.gain.linearRampToValueAtTime(0, t + 0.06);
+  for (const n of nodes) { try { n.stop(t + 0.1); } catch (e) {} }
+  laserWeldNodes = null;
+}
+
 // Resize canvas to fit window (preserve crisp rendering)
 function resize() {
   const w = window.innerWidth;
@@ -2020,6 +2138,7 @@ function spawnPlayer() {
   mgStuckFire = false;
   laserCharge = 0;
   laserBeam.active = false;
+  stopLaserHum(); stopLaserWeld();
 }
 spawnPlayer();
 
@@ -2542,6 +2661,7 @@ function update(now) {
   // ikke akkumulerer under pause.
   if (titleVisible || victoryVisible || shopVisible || cutsceneVisible || familyCutsceneVisible) {
     lastTime = now;
+    stopLaserHum(); stopLaserWeld();   // ingen lingering laser-lyd under overlays
     return;
   }
   const dt = Math.min(33, now - lastTime);
@@ -2551,6 +2671,7 @@ function update(now) {
 
   // --- Dying state: 1.5s build-up med voksende flammer, derefter eksplosion ---
   if (player.dying) {
+    stopLaserHum(); stopLaserWeld();   // laseren tier naar skibet dør
     player.dyingT += dt;
     // Fade gameplay-musikken lineaert ud over dying-fasen (saa den ikke brat
     // stopper naar den endelige eksplosion fyrer).
@@ -2730,7 +2851,8 @@ function update(now) {
         else          fireBullet(firingAngle());
         player.magazine--;
       }
-      sfxFire();
+      if (useRusty) sfxRevolver();
+      else          sfxFire();
       if (player.magazine > 0) {
         player.fireCooldown = 180 / rof;   // kort pause inde i burst'en
       } else {
@@ -3165,8 +3287,10 @@ function updateLaser(firing, dtSec) {
   laserBeam.hit = false;
   if (!firing) {
     laserCharge = Math.max(0, laserCharge - LASER_DECAY_RATE * dtSec);
+    stopLaserHum(); stopLaserWeld();
     return;
   }
+  startLaserHum();   // staaende lyssværd-hum mens strålen er tændt
   const ox = player.x, oy = player.y - 8;
   const ang = player.turretAngle;                  // præcis — lysets hastighed
   const dx = Math.cos(ang), dy = Math.sin(ang);
@@ -3191,11 +3315,13 @@ function updateLaser(firing, dtSec) {
     const dps = LASER_DPS_MIN + (LASER_DPS_MAX - LASER_DPS_MIN) * laserCharge;
     hitE.hits += dps * dtSec;
     if (Math.random() < 0.4) spawnSpark(laserBeam.x2, laserBeam.y2, ang + Math.PI);
+    startLaserWeld();   // let svejse-syden mens strålen rammer
     if (hitE.hits >= 5 - 1e-9) laserKill(hitE);
   } else {
     laserBeam.x2 = ox + dx * LASER_RANGE;
     laserBeam.y2 = oy + dy * LASER_RANGE;
     laserCharge = Math.max(0, laserCharge - LASER_DECAY_RATE * dtSec);
+    stopLaserWeld();    // strålen rammer intet → ingen svejse-lyd
   }
 }
 
