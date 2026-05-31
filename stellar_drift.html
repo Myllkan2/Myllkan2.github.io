@@ -1083,10 +1083,29 @@ const MOOD_EFFECTS = {
 };
 function moodFx() { return MOOD_EFFECTS[brianMood] || MOOD_EFFECTS.Content; }
 
+// ===== Våben-tuning (phase 2) =================================================
+// Old Rusty Spacegun: ballistisk slug der affyres i raket-kadence (langsomt) og
+// giver samme skade som MG'en pr. kugle (1/6). Den skyder skævt: en fast ekstra
+// spredning paa højde med Afraid-humøret. Er Brian OGSAA Afraid, lægges humørets
+// fejl oveni → endnu mere upræcist (8° + 8° = 16°).
+const RUSTY_SPREAD_DEG = 8;
+const RUSTY_SPEED = 1000;          // px/s, mood-skaleret — lidt under MG-slug
+
+// Weak Laser: hitscan-stråle (lysets hastighed). Svag i starten, men skaden
+// rampes op mens man HOLDER strålen paa en fjende. Charge 0→1 paa ~0.5s.
+const LASER_RANGE       = 1300;
+const LASER_CHARGE_RATE = 2.0;     // charge/sek mens strålen rammer en fjende
+const LASER_DECAY_RATE  = 2.5;     // charge/sek naar den ikke rammer noget
+const LASER_DPS_MIN     = 0.8;     // skade/sek ved charge 0 (fjende dør ved 5)
+const LASER_DPS_MAX     = 5.0;     // skade/sek ved fuld charge
+let laserCharge = 0;
+const laserBeam = { active: false, x1: 0, y1: 0, x2: 0, y2: 0, hit: false };
+
 // Aim-vinkel for et skud — taarnet peger paa musen, men ramte vinkel kan have
-// fejlmargin (Angry/Afraid). Tilfaeldigt ±aimError grader pr. skud.
+// fejlmargin (Angry/Afraid + Old Rusty Spacegun). Tilfaeldigt ±err grader pr. skud.
 function firingAngle() {
-  const errDeg = moodFx().aimError;
+  let errDeg = moodFx().aimError;
+  if (equippedWeapon === 'weapon-rusty') errDeg += RUSTY_SPREAD_DEG;   // skæv pibe, stacker med humør
   if (errDeg === 0) return player.turretAngle;
   const errRad = errDeg * Math.PI / 180;
   return player.turretAngle + (Math.random() * 2 - 1) * errRad;
@@ -1999,6 +2018,8 @@ function spawnPlayer() {
   brianCleanKills = 0;
   setBrianMood(BRIAN_DEFAULT);
   mgStuckFire = false;
+  laserCharge = 0;
+  laserBeam.active = false;
 }
 spawnPlayer();
 
@@ -2657,10 +2678,14 @@ function update(now) {
   //  • Touch + maskingevaer: hold sigte-joysticken nede (+ retning) = autofire,
   //    ligesom paa PC. MG'et har sin egen overheat-bar, saa hold-fyring passer.
   const mgHeld = aimstick.active && aimstick.mag > 0;   // sigte-joysticken holdes nede
+  // MG + laser fyres ved at HOLDE (touch: hold sigte-joysticken); raket/rusty er enkeltskud pr. tryk.
+  const holdWeapon = (equippedWeapon === 'weapon-mg' || equippedWeapon === 'weapon-laser');
   const trigger = touchModeOn
-    ? (equippedWeapon === 'weapon-mg' ? mgHeld : touchFireRequest)
+    ? (holdWeapon ? mgHeld : touchFireRequest)
     : mouse.down;
-  if (equippedWeapon === 'weapon-mg') {
+  if (equippedWeapon === 'weapon-laser') {
+    updateLaser(trigger, dtSec);
+  } else if (equippedWeapon === 'weapon-mg') {
     // Heat-dynamik: stiger 1/3 per sekund mens man fyrer (fuld paa 3s),
     // falder 2/3 per sekund naar man ikke fyrer (tom paa 1.5s). Locked ved
     // 100%, unlocked igen naar heat er nul.
@@ -2695,10 +2720,14 @@ function update(now) {
       player.magazine = 3;
     }
     if (trigger && player.fireCooldown <= 0 && player.magazine > 0) {
-      // Angry: trigger "fastholdes" → fireMult raketter pr. klik (clamped til magasin).
+      // Angry: trigger "fastholdes" → fireMult skud pr. klik (clamped til magasin).
+      // Old Rusty Spacegun deler raket-kadencen (samme rate som Rocket Launcher),
+      // men affyrer rustne slugs i stedet for raketter.
+      const useRusty = (equippedWeapon === 'weapon-rusty');
       const burst = Math.min(moodFx().fireMult, player.magazine);
       for (let k = 0; k < burst; k++) {
-        fireBullet(firingAngle());
+        if (useRusty) fireRustyBullet(firingAngle());
+        else          fireBullet(firingAngle());
         player.magazine--;
       }
       sfxFire();
@@ -2991,12 +3020,13 @@ function update(now) {
       if (bdx*bdx + bdy*bdy < (e.radius + 3) * (e.radius + 3)) {
         bullets.splice(j, 1);
         const isMG = b.kind === 'mg';
-        // MG: lille gnist; raket: fuld impact-explosion
-        if (isMG) spawnSpark(b.x, b.y, b.angle);
-        else      spawnExplosion(b.x, b.y, b.angle);
-        // Damage: raket = 1 hit, MG = 1/6 hit (30 kugler droeber en fjende).
+        // MG + rusty slug: lette kugler (lille gnist, 1/6 skade). Raket: fuld explosion.
+        const lightBullet = isMG || b.kind === 'rusty';
+        if (lightBullet) spawnSpark(b.x, b.y, b.angle);
+        else             spawnExplosion(b.x, b.y, b.angle);
+        // Damage: raket = 1 hit, MG/rusty = 1/6 hit (30 kugler droeber en fjende).
         // e.hits er fra nu af en float.
-        const damage = isMG ? (1 / 6) : 1;
+        const damage = lightBullet ? (1 / 6) : 1;
         e.hits += damage;
         // Ship-local hit position: inverse rotate (aimAngle) + inverse scale (0.85)
         const cosA = Math.cos(e.aimAngle), sinA = Math.sin(e.aimAngle);
@@ -3038,8 +3068,8 @@ function update(now) {
           const inFireTier = e.hits > 2;   // samme threshold som visuel tier
           const tier = inFireTier ? 'fire' : 'crack';
           e.damageMarks.push({ localX, localY, tier, seed: Math.random() });
-          if (isMG) {
-            // MG-hit: "kugle mod metal" indtil ilden er startet, derefter
+          if (lightBullet) {
+            // MG/rusty-hit: "kugle mod metal" indtil ilden er startet, derefter
             // mindre fire-eksplosion ved hvert hit (skroget braender, hver
             // kugle blusser flammerne op).
             if (inFireTier) sfxFireExplosion({ volume: 0.4 });
@@ -3104,6 +3134,89 @@ function fireMGBullet(angle) {
     angle: angle,
     burnerOn: false             // ingen accel-fase
   });
+}
+
+// Rusty slug: konstant fart, ingen burner. Samme skade som MG (1/6) men affyret
+// i raket-kadence + ekstra skæv spredning (se firingAngle). Lever 1.4s.
+function fireRustyBullet(angle) {
+  if (angle === undefined) angle = player.turretAngle;
+  const SPEED = RUSTY_SPEED * moodFx().proj;
+  const turretX = player.x;
+  const turretY = player.y - 8;
+  const barrelLen = 14;
+  bullets.push({
+    kind: 'rusty',
+    x: turretX + Math.cos(angle) * barrelLen,
+    y: turretY + Math.sin(angle) * barrelLen,
+    vx: player.vx + Math.cos(angle) * SPEED,
+    vy: player.vy + Math.sin(angle) * SPEED,
+    life: 1400,
+    angle: angle,
+    burnerOn: false
+  });
+}
+
+// Weak Laser: hitscan-stråle fra taarnet langs sigte-vinklen. Finder naermeste
+// fjende paa strålen; mens den HOLDES paa en fjende rampes charge (og dermed
+// skade/sek) op. Glider strålen af, falder charge igen. Kaldes hver frame mens
+// laseren er udstyret — ogsaa naar der ikke fyres (for at lade charge falde).
+function updateLaser(firing, dtSec) {
+  laserBeam.active = false;
+  laserBeam.hit = false;
+  if (!firing) {
+    laserCharge = Math.max(0, laserCharge - LASER_DECAY_RATE * dtSec);
+    return;
+  }
+  const ox = player.x, oy = player.y - 8;
+  const ang = player.turretAngle;                  // præcis — lysets hastighed
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  // Naermeste fjende langs strålen inden for rækkevidde (ray-cirkel projektion).
+  let hitE = null, hitDist = LASER_RANGE;
+  for (const e of enemies) {
+    if (e.dying) continue;
+    const px = e.x - ox, py = e.y - oy;
+    const t = px * dx + py * dy;                    // afstand langs strålen
+    if (t < 0 || t > LASER_RANGE) continue;
+    const perpX = px - t * dx, perpY = py - t * dy;
+    const rr = (e.radius + 3) * (e.radius + 3);
+    if (perpX * perpX + perpY * perpY <= rr && t < hitDist) { hitDist = t; hitE = e; }
+  }
+  laserBeam.active = true;
+  laserBeam.x1 = ox; laserBeam.y1 = oy;
+  if (hitE) {
+    laserBeam.x2 = ox + dx * hitDist;
+    laserBeam.y2 = oy + dy * hitDist;
+    laserBeam.hit = true;
+    laserCharge = Math.min(1, laserCharge + LASER_CHARGE_RATE * dtSec);
+    const dps = LASER_DPS_MIN + (LASER_DPS_MAX - LASER_DPS_MIN) * laserCharge;
+    hitE.hits += dps * dtSec;
+    if (Math.random() < 0.4) spawnSpark(laserBeam.x2, laserBeam.y2, ang + Math.PI);
+    if (hitE.hits >= 5 - 1e-9) laserKill(hitE);
+  } else {
+    laserBeam.x2 = ox + dx * LASER_RANGE;
+    laserBeam.y2 = oy + dy * LASER_RANGE;
+    laserCharge = Math.max(0, laserCharge - LASER_DECAY_RATE * dtSec);
+  }
+}
+
+// Fjende dræbt af laseren — spejler bullet-hittets døds-logik (humør, pirat-tæller,
+// flammer, lyd) saa kills tæller ens uanset våben.
+function laserKill(e) {
+  e.dying = true;
+  e.dyingT = 0;
+  brianOnKill();
+  if (hasGraduated && !ambushWon) {
+    pirateKills++;
+    if (pirateKills >= 10) triggerAmbushWin();
+  }
+  const A = 12, B = 11;
+  for (let k = 0; k < 3; k++) {
+    const a = Math.random() * Math.PI * 2;
+    const rad = 0.45 + Math.random() * 0.5;
+    e.damageMarks.push({ localX: Math.cos(a) * A * rad, localY: Math.sin(a) * B * rad, tier: 'fire', seed: Math.random() });
+  }
+  sfxImpactExplosion();
+  sfxBurning(e.dyingDuration / 1000);
 }
 
 function fireEnemyBullet(e) {
@@ -3457,6 +3570,9 @@ function render() {
 
   // Player ship
   drawPlayer();
+
+  // Weak Laser-stråle (tegnes oven paa skibet saa den lancer ud fra taarnet)
+  drawLaserBeam();
 
   // Ship debris (faste stykker) under gnisterne saa de roterer i forgrunden
   drawDebris();
@@ -4096,6 +4212,36 @@ function drawPlayerBullets() {
       ctx.restore();
       continue;   // skip resten af raket-render-logikken for denne bullet
     }
+    // Rusty slug: ligesom MG-traceren men rusten/orange og en anelse stoerre.
+    if (b.kind === 'rusty') {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const trailLen = 14;
+      const tailX = b.x - Math.cos(b.angle) * trailLen;
+      const tailY = b.y - Math.sin(b.angle) * trailLen;
+      const trail = ctx.createLinearGradient(tailX, tailY, b.x, b.y);
+      trail.addColorStop(0, 'rgba(200, 120, 50, 0)');
+      trail.addColorStop(1, 'rgba(235, 150, 70, 0.7)');
+      ctx.strokeStyle = trail;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(tailX, tailY);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      const glow = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 3.5);
+      glow.addColorStop(0, 'rgba(255, 200, 130, 0.85)');
+      glow.addColorStop(1, 'rgba(200, 110, 40, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffd9a0';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 1.0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      continue;
+    }
     // Burner plume (only while rocket motor is firing)
     if (b.burnerOn) {
       ctx.save();
@@ -4174,6 +4320,42 @@ function drawPlayerBullets() {
       ctx.fill();
     }
     ctx.restore();
+  }
+  ctx.restore();
+}
+
+// Weak Laser-stråle: tynd/dæmpet rød naar svag, tyk/lys hvid-gylden ved fuld
+// charge — visuel feedback paa optrapnings-mekanikken. Kun mens spilleren lever.
+function drawLaserBeam() {
+  if (!laserBeam.active || !player.alive || player.dying) return;
+  const c = laserCharge;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  // Ydre glød
+  ctx.strokeStyle = 'rgba(255, ' + Math.round(80 + c * 120) + ', 60, ' + (0.16 + c * 0.34) + ')';
+  ctx.lineWidth = 2 + c * 5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(laserBeam.x1, laserBeam.y1);
+  ctx.lineTo(laserBeam.x2, laserBeam.y2);
+  ctx.stroke();
+  // Indre kerne
+  ctx.strokeStyle = 'rgba(255, 240, ' + Math.round(170 + c * 70) + ', ' + (0.55 + c * 0.4) + ')';
+  ctx.lineWidth = 0.8 + c * 2.2;
+  ctx.beginPath();
+  ctx.moveTo(laserBeam.x1, laserBeam.y1);
+  ctx.lineTo(laserBeam.x2, laserBeam.y2);
+  ctx.stroke();
+  // Kontakt-glød paa fjenden
+  if (laserBeam.hit) {
+    const r = 4 + c * 8;
+    const g = ctx.createRadialGradient(laserBeam.x2, laserBeam.y2, 0, laserBeam.x2, laserBeam.y2, r);
+    g.addColorStop(0, 'rgba(255, 245, 210, ' + (0.7 + c * 0.3) + ')');
+    g.addColorStop(1, 'rgba(255, 120, 40, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(laserBeam.x2, laserBeam.y2, r, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.restore();
 }
