@@ -444,6 +444,17 @@
     font-style: italic;
     letter-spacing: 2px;
   }
+  #ambushWin .bounty {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    letter-spacing: 4px;
+    color: #ffe27a;
+    text-shadow: 0 0 18px rgba(230, 183, 64, 0.5);
+    margin-bottom: 32px;
+  }
+  #ambushWin .bounty .coin-pip { width: 14px; height: 14px; }
   #ambushWin .prompt {
     font-size: 12px;
     letter-spacing: 4px;
@@ -936,6 +947,7 @@
     The raiders have taken heavy losses. One by one their engines spool down and peel away into the dark.<br><br>
     On an open channel the captain mutters — bitter, exhausted: <em>"This one isn't worth the catch."</em>
   </div>
+  <div class="bounty" id="ambushBounty"></div>
   <div class="prompt">PRESS ANY KEY TO CONTINUE</div>
 </div>
 
@@ -973,6 +985,7 @@ const shopLaunchBtn = document.getElementById('shopLaunch');
 const shopLaunchHintEl = document.getElementById('shopLaunchHint');
 const cutsceneEl = document.getElementById('cutscene');
 const ambushWinEl = document.getElementById('ambushWin');
+const ambushBountyEl = document.getElementById('ambushBounty');
 const familyCutsceneEl = document.getElementById('familyCutscene');
 const familyCutsceneVideo = document.getElementById('familyCutsceneVideo');
 const familyCutsceneSubtitleEl = document.getElementById('familyCutsceneSubtitle');
@@ -1096,7 +1109,9 @@ let ambushWon = false;
 // Input-lockout: forhindrer at en tast under retreat-sekvensen straks lukker
 // overlayet, foer spilleren har naaet at se flugten + laese noten.
 let ambushInputReady = false;
-// Spillerens mønter og ejede items. Nulstilles ved hvert shop-besoeg (placeholder for phase 2 trin 1).
+// Spillerens vedvarende pung + ejede items. Start-kapital 1050 (saettes her een
+// gang ved script-load). Nulstilles IKKE ved shop-besoeg — coins tjenes som dusør
+// i kamp og bruges over flere besoeg; købte skibe/items bevares.
 let coins = 1050;
 // ship: enkelt-slot (ét skib ad gangen). De øvrige er multi-slots (lister) — man
 // kan eje flere vaaben/tilbehoer/rengoeringer samtidig. SLOT_LISTS mapper et items
@@ -2004,13 +2019,16 @@ function restartGame() {
 // Trin 1: kun UI + mønter. Køb registreres men har endnu ingen gameplay-effekt;
 // senere phase 2-commits kobler tiny ship, hull HP og våben-typer paa.
 function openShop() {
-  // Fresh shop-besoeg: ryd victory/ambush-overlays og start med 100 moenter + tom ejer-liste.
+  // Ryd victory/ambush-overlays foer shoppen vises.
   victoryEl.classList.remove('visible');
   victoryVisible = false;
   ambushWinEl.classList.remove('visible');
   ambushWon = false;
-  coins = 1050;
-  owned = { ship: null, weapons: [], accessories: [], cleaning: [] };
+  // Coins + ejede items er nu en VEDVARENDE pung/beholdning — de nulstilles IKKE
+  // ved hvert besoeg. Start-kapitalen (1050) saettes ved spil-start; dusoer fra
+  // bagholdet er allerede lagt til. Det lille skib man koeber bliver derfor ejet
+  // ved naeste besoeg, og resterende coins baeres med. (Engangs-init sker via
+  // `let coins`/`let owned`-deklarationerne ved script-load.)
   updateShopUI();
   shopVisible = true;
   shopEl.classList.add('visible');
@@ -2255,9 +2273,17 @@ function triggerVictory() {
 // 10 pirat-kills i ambush-missionen — pirater bryder af og flygter. Spillet
 // kører videre saa fjenderne kan thrust off-screen og raketterne kan dø ud;
 // alle kollisioner er slaaet fra fra og med dette tidspunkt.
+// Dusør pr. draebt pirat — udbetales naar kampen er ovre. 12 coins/kill, saa
+// bagholdets 10 kills giver 120 coins. Laegges i den vedvarende pung (coins
+// nulstilles ikke laengere ved shop-besoeg), saa belønningen overlever ind i shoppen.
+const BOUNTY_PER_KILL = 12;
+
 function triggerAmbushWin() {
   ambushWon = true;
   ambushInputReady = false;
+  const bounty = BOUNTY_PER_KILL * pirateKills;
+  coins += bounty;
+  ambushBountyEl.innerHTML = 'BOUNTY COLLECTED &nbsp; +' + bounty + ' <span class="coin-pip"></span>';
   ambushWinEl.classList.add('visible');
   // Cap levetiden paa eksisterende fjende-raketter saa de blaeser ud inden for
   // et sekund — de er nu harmloese, men skal heller ikke svaeve i evig tid.
