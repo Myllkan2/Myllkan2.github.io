@@ -2070,6 +2070,21 @@ window.addEventListener('resize', () => setTimeout(bakeMilkyWay, 50));
 // ============================================================================
 // GAME OBJECTS
 // ============================================================================
+// EKSPERIMENT (experiment/half-size-ships): krymper ALT — skibe, fjender, kugler,
+// laser og hitboxes — om deres eget centrum, saa banen foeles stoerre og afstande
+// laengere. Farten er bevidst URØRT, saa de mindre skibe driver i mere "rum".
+// Saet til 1.0 for at slaa forsoeget fra. Anvendes paa: skibenes ctx.scale,
+// de 4 kollisions-sammenligninger, vaaben-mundingerne og kugle/laser-tegningen.
+// Proev fx 2/3 (mellemting) eller 0.5 (halv) for forskellige grader af "rum".
+const WORLD_SCALE = 2 / 3;
+// Skalér en tegning om punktet (px,py): alt der tegnes bagefter (arcs, rects,
+// lineWidth, gradient-radier) krymper mod det punkt. Brugt pr. kugle saa den
+// forbliver centreret hvor den er, men bliver halvt saa stor.
+function scaleAbout(px, py, s) {
+  ctx.translate(px, py);
+  ctx.scale(s, s);
+  ctx.translate(-px, -py);
+}
 // Ship-typer: konfiguration som playeren faar tilfoert ved spawn. Default er
 // starterskibet (foer foerste shop-besoeg); 'ship-tiny' kobles paa hvis spilleren
 // har koebt det i quartermaster-shoppen.
@@ -2921,7 +2936,7 @@ function update(now) {
     } else if (player.alive && !ambushWon) {
       // Impact paa skroget?
       const pdx = b.x - player.x, pdy = b.y - player.y;
-      if (pdx*pdx + pdy*pdy < (player.radius + 3) * (player.radius + 3)) {
+      if (pdx*pdx + pdy*pdy < ((player.radius + 3) * WORLD_SCALE) * ((player.radius + 3) * WORLD_SCALE)) {
         spawnExplosion(b.x, b.y, b.angle);
         // Knockback: ~15% af projektilets momentum overfoeres til skibet
         const KNOCKBACK = 0.15;
@@ -3146,7 +3161,7 @@ function update(now) {
     for (let j = bullets.length - 1; j >= 0; j--) {
       const b = bullets[j];
       const bdx = b.x - e.x, bdy = b.y - e.y;
-      if (bdx*bdx + bdy*bdy < (e.radius + 3) * (e.radius + 3)) {
+      if (bdx*bdx + bdy*bdy < ((e.radius + 3) * WORLD_SCALE) * ((e.radius + 3) * WORLD_SCALE)) {
         bullets.splice(j, 1);
         const isMG = b.kind === 'mg';
         // MG + rusty slug: lette kugler (lille gnist, 1/6 skade). Raket: fuld explosion.
@@ -3228,8 +3243,8 @@ function fireBullet(angle) {
   const INITIAL_SPEED = 134 * projMult;   // 30% of target - burner ignites here
   const ACCEL         = 523 * projMult;   // px/s^2: reaches target in ~0.6s
   const turretX = player.x;
-  const turretY = player.y - 8;
-  const barrelLen = 14;
+  const turretY = player.y - 8 * WORLD_SCALE;   // taarn-offset foelger skibets stoerrelse
+  const barrelLen = 14 * WORLD_SCALE;
   bullets.push({
     kind: 'rocket',
     x: turretX + Math.cos(angle) * barrelLen,
@@ -3251,8 +3266,8 @@ function fireMGBullet(angle) {
   if (angle === undefined) angle = player.turretAngle;
   const SPEED = 1344 * moodFx().proj;     // 3x raket target speed, mood-skaleret
   const turretX = player.x;
-  const turretY = player.y - 8;
-  const barrelLen = 14;
+  const turretY = player.y - 8 * WORLD_SCALE;   // taarn-offset foelger skibets stoerrelse
+  const barrelLen = 14 * WORLD_SCALE;
   bullets.push({
     kind: 'mg',
     x: turretX + Math.cos(angle) * barrelLen,
@@ -3271,8 +3286,8 @@ function fireRustyBullet(angle) {
   if (angle === undefined) angle = player.turretAngle;
   const SPEED = RUSTY_SPEED * moodFx().proj;
   const turretX = player.x;
-  const turretY = player.y - 8;
-  const barrelLen = 14;
+  const turretY = player.y - 8 * WORLD_SCALE;   // taarn-offset foelger skibets stoerrelse
+  const barrelLen = 14 * WORLD_SCALE;
   bullets.push({
     kind: 'rusty',
     x: turretX + Math.cos(angle) * barrelLen,
@@ -3299,7 +3314,7 @@ function updateLaser(firing, dtSec) {
     return;
   }
   startLaserHum();   // staaende lyssværd-hum mens strålen er tændt
-  const ox = player.x, oy = player.y - 8;
+  const ox = player.x, oy = player.y - 8 * WORLD_SCALE;
   const ang = player.turretAngle;                  // præcis — lysets hastighed
   const dx = Math.cos(ang), dy = Math.sin(ang);
   // Naermeste fjende langs strålen inden for rækkevidde (ray-cirkel projektion).
@@ -3310,7 +3325,7 @@ function updateLaser(firing, dtSec) {
     const t = px * dx + py * dy;                    // afstand langs strålen
     if (t < 0 || t > LASER_RANGE) continue;
     const perpX = px - t * dx, perpY = py - t * dy;
-    const rr = (e.radius + 3) * (e.radius + 3);
+    const rr = ((e.radius + 3) * WORLD_SCALE) * ((e.radius + 3) * WORLD_SCALE);
     if (perpX * perpX + perpY * perpY <= rr && t < hitDist) { hitDist = t; hitE = e; }
   }
   laserBeam.active = true;
@@ -3367,8 +3382,8 @@ function fireEnemyBullet(e) {
   const ty = player.y + player.vy * leadTime;
   const aimAng = Math.atan2(ty - e.y, tx - e.x);
   enemyBullets.push({
-    x: e.x + Math.cos(aimAng) * 24,
-    y: e.y + Math.sin(aimAng) * 24,
+    x: e.x + Math.cos(aimAng) * 24 * WORLD_SCALE,
+    y: e.y + Math.sin(aimAng) * 24 * WORLD_SCALE,
     vx: Math.cos(aimAng) * INITIAL_SPEED,
     vy: Math.sin(aimAng) * INITIAL_SPEED,
     life: 18000,
@@ -3470,7 +3485,7 @@ function handleShipCollision(e) {
   const dx = player.x - e.x;
   const dy = player.y - e.y;
   const distSq = dx * dx + dy * dy;
-  const minDist = player.radius + e.radius;
+  const minDist = (player.radius + e.radius) * WORLD_SCALE;
   if (distSq >= minDist * minDist) return;
   const dist = Math.sqrt(distSq) || 0.001;
   const nx = dx / dist;   // peger fra fjende mod player
@@ -3809,7 +3824,8 @@ function drawPlayer() {
   ctx.translate(player.x, player.y);
   // Tiny ship er halv stoerrelse — én scale-transform haandterer hull, thruster,
   // turret, flammer og damage-marks (alle drawn i unscaled local coords).
-  if (player.scale !== 1.0) ctx.scale(player.scale, player.scale);
+  // WORLD_SCALE (eksperiment) krymper hele skibet yderligere.
+  ctx.scale(player.scale * WORLD_SCALE, player.scale * WORLD_SCALE);
 
   // ============================================
   // SHIP HULL (fixed orientation - always points up on screen)
@@ -4114,7 +4130,8 @@ function drawEnemy(e) {
   ctx.translate(e.x, e.y);
   // Skalering: skroget tegnes i sit oprindelige koordinatsystem (extents ±18)
   // og skaleres ned saa den endelige fjende er lidt stoerre end spilleren.
-  ctx.scale(0.85, 0.85);
+  // WORLD_SCALE (eksperiment) krymper fjenden yderligere.
+  ctx.scale(0.85 * WORLD_SCALE, 0.85 * WORLD_SCALE);
 
   // Thrust flame
   if (e.thrusting) {
@@ -4319,6 +4336,7 @@ function drawPlayerBullets() {
     // MG-tracer: lille glowing dot + kort streak. Ingen flame, ingen shell.
     if (b.kind === 'mg') {
       ctx.save();
+      scaleAbout(b.x, b.y, WORLD_SCALE);
       ctx.globalCompositeOperation = 'lighter';
       // Streak bagud (motion blur)
       const trailLen = 12;
@@ -4351,6 +4369,7 @@ function drawPlayerBullets() {
     // Rusty slug: ligesom MG-traceren men rusten/orange og en anelse stoerre.
     if (b.kind === 'rusty') {
       ctx.save();
+      scaleAbout(b.x, b.y, WORLD_SCALE);
       ctx.globalCompositeOperation = 'lighter';
       const trailLen = 14;
       const tailX = b.x - Math.cos(b.angle) * trailLen;
@@ -4383,6 +4402,7 @@ function drawPlayerBullets() {
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(b.angle);
+      ctx.scale(WORLD_SCALE, WORLD_SCALE);
       ctx.globalCompositeOperation = 'lighter';
       const flicker = 0.85 + Math.sin(gameTime * 0.08 + b.x * 0.1) * 0.15;
       const plumeLen = 11 * flicker;
@@ -4401,6 +4421,7 @@ function drawPlayerBullets() {
     }
     // Cannon shell - small glowing metal slug with a faint trail
     ctx.save();
+    scaleAbout(b.x, b.y, WORLD_SCALE);
     ctx.globalCompositeOperation = 'lighter';
     // Soft trail behind the shell
     const trailLen = 18;
@@ -4429,6 +4450,7 @@ function drawPlayerBullets() {
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.angle);
+    ctx.scale(WORLD_SCALE, WORLD_SCALE);
     // Shell shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(-3.5, -1.8, 7, 3.6);
@@ -4469,7 +4491,7 @@ function drawLaserBeam() {
   ctx.globalCompositeOperation = 'lighter';
   // Ydre glød
   ctx.strokeStyle = 'rgba(255, ' + Math.round(80 + c * 120) + ', 60, ' + (0.16 + c * 0.34) + ')';
-  ctx.lineWidth = 2 + c * 5;
+  ctx.lineWidth = (2 + c * 5) * WORLD_SCALE;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(laserBeam.x1, laserBeam.y1);
@@ -4477,14 +4499,14 @@ function drawLaserBeam() {
   ctx.stroke();
   // Indre kerne
   ctx.strokeStyle = 'rgba(255, 240, ' + Math.round(170 + c * 70) + ', ' + (0.55 + c * 0.4) + ')';
-  ctx.lineWidth = 0.8 + c * 2.2;
+  ctx.lineWidth = (0.8 + c * 2.2) * WORLD_SCALE;
   ctx.beginPath();
   ctx.moveTo(laserBeam.x1, laserBeam.y1);
   ctx.lineTo(laserBeam.x2, laserBeam.y2);
   ctx.stroke();
   // Kontakt-glød paa fjenden
   if (laserBeam.hit) {
-    const r = 4 + c * 8;
+    const r = (4 + c * 8) * WORLD_SCALE;
     const g = ctx.createRadialGradient(laserBeam.x2, laserBeam.y2, 0, laserBeam.x2, laserBeam.y2, r);
     g.addColorStop(0, 'rgba(255, 245, 210, ' + (0.7 + c * 0.3) + ')');
     g.addColorStop(1, 'rgba(255, 120, 40, 0)');
@@ -4504,6 +4526,7 @@ function drawEnemyBullets() {
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(b.angle);
+      ctx.scale(WORLD_SCALE, WORLD_SCALE);
       ctx.globalCompositeOperation = 'lighter';
       const flicker = 0.85 + Math.sin(gameTime * 0.07 + b.x * 0.1) * 0.15;
       const plumeLen = 14 * flicker;
@@ -4522,6 +4545,7 @@ function drawEnemyBullets() {
     }
     // Heavy enemy shell - larger, hotter, with a glowing trail
     ctx.save();
+    scaleAbout(b.x, b.y, WORLD_SCALE);
     ctx.globalCompositeOperation = 'lighter';
     // Long warm trail - only while burner is firing
     if (b.burnerOn) {
@@ -4554,6 +4578,7 @@ function drawEnemyBullets() {
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.angle);
+    ctx.scale(WORLD_SCALE, WORLD_SCALE);
     // Shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(-4.5, -2.5, 9, 5);
