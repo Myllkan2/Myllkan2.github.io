@@ -1092,13 +1092,19 @@ const RUSTY_SPREAD_DEG = 8;
 const RUSTY_SPEED = 1000;          // px/s, mood-skaleret — lidt under MG-slug
 
 // Weak Laser: hitscan-stråle (lysets hastighed). Svag i starten, men skaden
-// rampes op mens man HOLDER strålen paa en fjende. Charge 0→1 paa ~0.5s.
+// rampes op mens man HOLDER strålen paa en fjende — som en lup der skal holdes
+// stille for at taende ild. Charge 0→1 paa ~2s; glider strålen af koeler den
+// hurtigt igen, saa man skal holde stabilt sigte.
 const LASER_RANGE       = 1300;
-const LASER_CHARGE_RATE = 2.0;     // charge/sek mens strålen rammer en fjende
+const LASER_CHARGE_RATE = 0.5;     // charge/sek mens strålen rammer en fjende (~2s til max)
 const LASER_DECAY_RATE  = 2.5;     // charge/sek naar den ikke rammer noget
-const LASER_DPS_MIN     = 0.8;     // skade/sek ved charge 0 (fjende dør ved 5)
-const LASER_DPS_MAX     = 5.0;     // skade/sek ved fuld charge
+const LASER_DPS_MIN     = 0.28;    // skade/sek ved charge 0 (fjende dør ved 5)
+const LASER_DPS_MAX     = 1.75;    // skade/sek ved fuld charge (~2.9s/drab ved fuld charge)
 let laserCharge = 0;
+// Fjenden strålen p.t. "taender op" paa. Skifter strålen til en ny fjende (eller
+// slipper helt), starter optaendingen forfra — saa man ikke kan baere fuld charge
+// fra et drab til det naeste. Identitets-sammenligning; refen derefes aldrig.
+let laserTarget = null;
 const laserBeam = { active: false, x1: 0, y1: 0, x2: 0, y2: 0, hit: false };
 
 // Aim-vinkel for et skud — taarnet peger paa musen, men ramte vinkel kan have
@@ -1759,6 +1765,21 @@ window.addEventListener('keydown', e => {
   console.log('[CHEAT] pirateKills =', pirateKills, '— naeste kill udloeser ambush-win');
 });
 
+// DEBUG: L udstyrer Weak Laser med det samme, saa man kan playteste laser-
+// optrapningen uden at gaa gennem tutorial + shop. Virker mens man spiller
+// (player alive, ingen overlay) — ogsaa i tutorial-simulationen.
+window.addEventListener('keydown', e => {
+  if (e.code !== 'KeyL' || e.repeat) return;
+  if (!player.alive || player.dying) return;
+  if (titleVisible || victoryVisible || shopVisible || cutsceneVisible || familyCutsceneVisible) return;
+  if (!owned.weapons.includes('weapon-laser')) owned.weapons.push('weapon-laser');
+  equippedWeapon = 'weapon-laser';
+  heatBlockEl.classList.remove('visible');   // laseren bruger ikke MG'ens heat-bar
+  laserCharge = 0;
+  laserTarget = null;
+  console.log('[CHEAT] equippedWeapon = weapon-laser — laser klar til playtest');
+});
+
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
   mouse.x = e.clientX - rect.left;
@@ -2137,6 +2158,7 @@ function spawnPlayer() {
   setBrianMood(BRIAN_DEFAULT);
   mgStuckFire = false;
   laserCharge = 0;
+  laserTarget = null;
   laserBeam.active = false;
   stopLaserHum(); stopLaserWeld();
 }
@@ -3287,6 +3309,7 @@ function updateLaser(firing, dtSec) {
   laserBeam.hit = false;
   if (!firing) {
     laserCharge = Math.max(0, laserCharge - LASER_DECAY_RATE * dtSec);
+    laserTarget = null;   // slap af paa aftraekkeren → optaendingen er glemt
     stopLaserHum(); stopLaserWeld();
     return;
   }
@@ -3311,6 +3334,8 @@ function updateLaser(firing, dtSec) {
     laserBeam.x2 = ox + dx * hitDist;
     laserBeam.y2 = oy + dy * hitDist;
     laserBeam.hit = true;
+    // Ny fjende i strålen? Optaendingen starter forfra — som at flytte luppen.
+    if (hitE !== laserTarget) { laserCharge = 0; laserTarget = hitE; }
     laserCharge = Math.min(1, laserCharge + LASER_CHARGE_RATE * dtSec);
     const dps = LASER_DPS_MIN + (LASER_DPS_MAX - LASER_DPS_MIN) * laserCharge;
     hitE.hits += dps * dtSec;
