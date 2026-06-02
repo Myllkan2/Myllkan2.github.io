@@ -956,7 +956,7 @@
   <div class="subtitle">BETWEEN THE STARS</div>
   <div class="story">
     Fresh license in your pocket and the keys to your <strong>first vessel</strong>, you set course for home.<br><br>
-    But the trade lanes aren't what they used to be. Halfway through the asteroid corridor your comms light up — scrap-rigged engines, pirate signatures closing fast. They've been waiting for graduates like you.<br><br>
+    But the trade lanes aren't what they used to be. Halfway through the asteroid corridor your comms light up — scrap-rigged engines, pirate signatures closing fast. No life signs aboard — just unmanned drone hulls the cartels set loose to pick off graduates like you.<br><br>
     There's no turning back, <strong>Brian</strong>. Fight your way home.
   </div>
   <div class="prompt">PRESS ANY KEY TO ENGAGE</div>
@@ -3373,8 +3373,8 @@ function laserKill(e) {
 function fireEnemyBullet(e) {
   sfxFire({ volume: 0.55, durationScale: 0.6 });   // SFX 6: ligesom player, men lavere og 40% kortere
   // Rocket: starts slow, burns to target speed, then coasts.
-  const TARGET_SPEED = 108;
-  const INITIAL_SPEED = 33;   // 30% of target - burner ignites here
+  const TARGET_SPEED = 129.6;   // +20% max speed (was 108) — harder to dodge now ships are smaller
+  const INITIAL_SPEED = 33;   // burner ignites here
   const ACCEL = 125;          // px/s^2: reaches target in ~0.6s
   // Predict player position - lead time scaled with shell travel time
   const leadTime = 2.0;
