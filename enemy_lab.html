@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Enemy Lab — Stellar Drift</title>
+<style>
+  body { margin:0; background:#0a0c12; color:#cdd6e0; font-family:system-ui,sans-serif; }
+  h2 { margin:18px 12px 6px; font-size:15px; color:#8fa3bf; font-weight:600; }
+  canvas { display:block; image-rendering:auto; }
+  #strip { background:#11151d; }
+  #grid  { background:#0a0c12; }
+  .note { margin:6px 12px; font-size:12px; color:#5f6f82; }
+</style>
+</head>
+<body>
+<h2>1 · Processed sprites — crosshair = pivot/mount, line = turret "forward"</h2>
+<canvas id="strip" width="1280" height="340"></canvas>
+<h2>2 · All 16 combos — hull faces up (0°), turret aims at +35° (proves independent rotation)</h2>
+<p class="note">Rows = hulls (Wedge / Brute / Disc / Hex) · Cols = turrets (TwinPod / Heavy / Needle / Stub)</p>
+<canvas id="grid" width="1280" height="1180"></canvas>
+
+<script>
+// ============================================================================
+// CALIBRATION — the numbers I tune. Pivot/mount are fractions of the source
+// image (0..1). forward = direction the turret's launcher points in the raw
+// image, as a screen-space angle (0 = right/east, -PI/2 = up, PI = left).
+// ============================================================================
+// pivot/mount fractions are relative to the AUTOCROPPED sprite.
+const HULLS = [
+  { name:'Wedge',  src:'Hull1_Wedge.jpeg', mount:{x:0.440, y:0.500}, forward:0, target:140 },
+  { name:'Brute',  src:'Hull2_Brute.jpeg', mount:{x:0.510, y:0.500}, forward:0, target:150 },
+  { name:'Disc',   src:'Hull3_Disc.jpeg',  mount:{x:0.500, y:0.500}, forward:0, target:150 },
+  { name:'Hex',    src:'Hull4_Hex.jpeg',   mount:{x:0.500, y:0.500}, forward:0, target:150 },
+];
+const TURRETS = [
+  { name:'TwinPod', src:'Turret_TwinPod.jpeg', pivot:{x:0.500, y:0.560}, forward:-Math.PI/2, scale:0.72 },
+  { name:'Heavy',   src:'TurretB_Heavy.jpeg',  pivot:{x:0.420, y:0.500}, forward: Math.PI,    scale:0.82 },
+  { name:'Needle',  src:'TurretC_Needle.jpeg', pivot:{x:0.620, y:0.500}, forward: Math.PI,    scale:0.82 },
+  { name:'Stub',    src:'TurretD_Stub.jpeg',   pivot:{x:0.500, y:0.500}, forward: 0,          scale:0.66 },
+];
+
+// Background removal tuning
+const SAT_MAX = 0.16;   // pixels more saturated than this are NEVER background
+const BRIGHT_MIN = 70;  // pixels darker than this are NEVER background (ship outline)
+
+// ----------------------------------------------------------------------------
+function loadImg(src){
+  return new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=src; });
+}
+
+// Edge flood-fill background removal. Learns nothing from corners directly —
+// instead classifies a pixel as "background-like" if it is low-saturation AND
+// bright, then removes only the region connected to the image border. Interior
+// ship greys survive because the dark ship outline walls them off from the edge.
+function process(img){
+  const w=img.naturalWidth, h=img.naturalHeight;
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const x=c.getContext('2d'); x.drawImage(img,0,0);
+  const id=x.getImageData(0,0,w,h); const d=id.data;
+  const N=w*h;
+  const visited=new Uint8Array(N);
+  const stack=new Int32Array(N); let sp=0;
+
+  function bgLike(p){
+    const i=p*4, r=d[i], g=d[i+1], b=d[i+2];
+    const mx=Math.max(r,g,b), mn=Math.min(r,g,b);
+    const sat = mx===0 ? 0 : (mx-mn)/mx;
+    const br = (r+g+b)/3;
+    return sat < SAT_MAX && br > BRIGHT_MIN;
+  }
+  function consider(px,py){
+    if(px<0||py<0||px>=w||py>=h) return;
+    const p=py*w+px;
+    if(visited[p]) return;
+    visited[p]=1;
+    if(bgLike(p)){ d[p*4+3]=0; stack[sp++]=p; }
+  }
+  for(let px=0;px<w;px++){ consider(px,0); consider(px,h-1); }
+  for(let py=0;py<h;py++){ consider(0,py); consider(w-1,py); }
+  while(sp>0){
+    const p=stack[--sp]; const px=p%w, py=(p/w)|0;
+    consider(px-1,py); consider(px+1,py); consider(px,py-1); consider(px,py+1);
+  }
+
+  // 1px defringe: knock down alpha on opaque pixels that border a removed pixel,
+  // to kill the grey halo left by the JPEG's anti-aliased edge.
+  const alpha = new Uint8ClampedArray(N);
+  for(let p=0;p<N;p++) alpha[p]=d[p*4+3];
+  for(let py=0;py<h;py++) for(let px=0;px<w;px++){
+    const p=py*w+px;
+    if(alpha[p]===0) continue;
+    let edge=false;
+    if(px>0   && alpha[p-1]===0) edge=true;
+    if(px<w-1 && alpha[p+1]===0) edge=true;
+    if(py>0   && alpha[p-w]===0) edge=true;
+    if(py<h-1 && alpha[p+w]===0) edge=true;
+    if(edge){ const i=p*4; d[i]=(d[i]*0.7)|0; d[i+1]=(d[i+1]*0.7)|0; d[i+2]=(d[i+2]*0.7)|0; d[i+3]=160; }
+  }
+  x.putImageData(id,0,0);
+
+  // Autocrop to the tight alpha bounding box so every sprite is sized by its
+  // actual object, not by however much empty margin the generator left.
+  let minX=w, minY=h, maxX=-1, maxY=-1;
+  for(let py=0;py<h;py++) for(let px=0;px<w;px++){
+    if(d[(py*w+px)*4+3] > 20){
+      if(px<minX)minX=px; if(px>maxX)maxX=px;
+      if(py<minY)minY=py; if(py>maxY)maxY=py;
+    }
+  }
+  const cw=maxX-minX+1, ch=maxY-minY+1;
+  const cc=document.createElement('canvas'); cc.width=cw; cc.height=ch;
+  cc.getContext('2d').drawImage(c, minX,minY,cw,ch, 0,0,cw,ch);
+  return { canvas:cc, w:cw, h:ch };
+}
+
+(async function(){
+  for(const o of [...HULLS, ...TURRETS]){
+    o.img = await loadImg(o.src);
+    const r = process(o.img);
+    o.canvas = r.canvas; o.w = r.w; o.h = r.h;
+  }
+
+  // --- Strip: each processed sprite with pivot crosshair + forward ray ---
+  const sc = document.getElementById('strip');
+  const sx = sc.getContext('2d');
+  const cell = 150, pad = 10;
+  function drawSprite(o, isTurret, col, row){
+    const cx = pad + col*(cell+pad) + cell/2;
+    const cy = 30 + row*(cell+40) + cell/2;
+    const s = (cell-20) / Math.max(o.w, o.h);
+    sx.drawImage(o.canvas, cx - o.w*s/2, cy - o.h*s/2, o.w*s, o.h*s);
+    // pivot
+    const pv = isTurret ? o.pivot : o.mount;
+    const pxn = cx - o.w*s/2 + pv.x*o.w*s;
+    const pyn = cy - o.h*s/2 + pv.y*o.h*s;
+    sx.strokeStyle='#ff3b6b'; sx.lineWidth=1.5;
+    sx.beginPath(); sx.moveTo(pxn-8,pyn); sx.lineTo(pxn+8,pyn); sx.moveTo(pxn,pyn-8); sx.lineTo(pxn,pyn+8); sx.stroke();
+    if(isTurret){
+      sx.strokeStyle='#42e0ff'; sx.lineWidth=2;
+      sx.beginPath(); sx.moveTo(pxn,pyn);
+      sx.lineTo(pxn+Math.cos(o.forward)*40, pyn+Math.sin(o.forward)*40); sx.stroke();
+    }
+    sx.fillStyle='#8fa3bf'; sx.font='12px system-ui'; sx.textAlign='center';
+    sx.fillText(o.name, cx, cy+cell/2+14);
+  }
+  HULLS.forEach((o,i)=>drawSprite(o,false,i,0));
+  TURRETS.forEach((o,i)=>drawSprite(o,true,i,1));
+
+  // --- Grid: every hull x turret combo ---
+  const gc = document.getElementById('grid');
+  const gx = gc.getContext('2d');
+  const GC = 300, GP = 12;
+  function drawCombo(hull, turret, cx, cy){
+    const hullAngle = -Math.PI/2;      // faces "up"
+    const aimAngle  = -Math.PI/2 + 0.61; // ~+35deg from hull
+    const hs = hull.target / hull.w;
+    // hull (rotates about its mount, which sits at cx,cy)
+    gx.save(); gx.translate(cx,cy); gx.rotate(hullAngle - hull.forward);
+    gx.drawImage(hull.canvas, -hull.mount.x*hull.w*hs, -hull.mount.y*hull.h*hs, hull.w*hs, hull.h*hs);
+    gx.restore();
+    // turret (rotates about its pivot, also at cx,cy)
+    const tw = hull.target * turret.scale;
+    const ts = tw / turret.w;
+    gx.save(); gx.translate(cx,cy); gx.rotate(aimAngle - turret.forward);
+    gx.drawImage(turret.canvas, -turret.pivot.x*turret.w*ts, -turret.pivot.y*turret.h*ts, turret.w*ts, turret.h*ts);
+    gx.restore();
+    // aim indicator
+    gx.strokeStyle='rgba(66,224,255,0.5)'; gx.lineWidth=1;
+    gx.beginPath(); gx.moveTo(cx,cy); gx.lineTo(cx+Math.cos(aimAngle)*120, cy+Math.sin(aimAngle)*120); gx.stroke();
+  }
+  HULLS.forEach((hull,r)=>{
+    TURRETS.forEach((turret,c)=>{
+      const cx = GP + c*(GC+GP) + GC/2;
+      const cy = GP + r*(GC+GP) + GC/2;
+      gx.strokeStyle='#1b2230'; gx.strokeRect(GP+c*(GC+GP), GP+r*(GC+GP), GC, GC);
+      drawCombo(hull, turret, cx, cy);
+      gx.fillStyle='#46566a'; gx.font='11px system-ui'; gx.textAlign='left';
+      gx.fillText(hull.name+' + '+turret.name, GP+c*(GC+GP)+8, GP+r*(GC+GP)+16);
+    });
+  });
+
+  // expose for extraction later
+  window.SPRITES = { HULLS, TURRETS };
+  // Export a sprite downscaled so its longest side == maxDim (game sprites are
+  // tiny vs the ~900px source; ~320px keeps it crisp at a fraction of the size).
+  window.exportScaled = (o, maxDim)=>{
+    const s = Math.min(1, maxDim / Math.max(o.w, o.h));
+    const cw = Math.round(o.w*s), ch = Math.round(o.h*s);
+    const t = document.createElement('canvas'); t.width=cw; t.height=ch;
+    const tx = t.getContext('2d'); tx.imageSmoothingEnabled=true; tx.imageSmoothingQuality='high';
+    tx.drawImage(o.canvas, 0,0,cw,ch);
+    return t.toDataURL('image/png');
+  };
+  window.saveAll = async (maxDim=320)=>{
+    const out=[];
+    for(const o of [...HULLS, ...TURRETS]){
+      const b64 = window.exportScaled(o, maxDim).split(',')[1];
+      try {
+        const r = await fetch('http://localhost:8134/save?name='+encodeURIComponent(o.name), {method:'POST', body:b64});
+        out.push(o.name+':'+r.status);
+      } catch(e){ out.push(o.name+':ERR '+e.message); }
+    }
+    return out;
+  };
+  window.LAB_READY = true;
+})();
+</script>
+</body>
+</html>

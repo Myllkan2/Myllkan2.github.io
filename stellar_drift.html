@@ -2133,6 +2133,39 @@ const player = {
 const enemies = [];
 const bullets = [];
 const enemyBullets = [];
+
+// ============================================================================
+// Enemy sprite kit — 4 hulls x 4 turrets = 16 random combos.
+// The PNGs in sprites/ are pre-baked with the background already removed, so we
+// just drawImage them in two independent layers: the HULL (drifts toward its
+// heading) and the TURRET (rotates to aim at the player; its rocket engine sits
+// at the rear, the launcher at the tip). mx/my = the hull's turret-mount point
+// and px/py = the turret's rotation pivot, both as fractions of the sprite.
+// forward = the screen-angle the turret's launcher points in the raw artwork
+// (0 = right, -PI/2 = up, PI = left), so we can rotate any turret to any aim.
+// Calibrated in enemy_lab.html.
+// ============================================================================
+const HULL_DESIGN_W = 48;   // hull width in the enemy's local "design" units (±18 legacy hull was ~36)
+function loadSprite(file) { const im = new Image(); im.src = 'sprites/' + file; return im; }
+const HULL_DEFS = [
+  { img: loadSprite('Wedge.png'), mx: 0.440, my: 0.500, forward: 0 },
+  { img: loadSprite('Brute.png'), mx: 0.510, my: 0.500, forward: 0 },
+  { img: loadSprite('Disc.png'),  mx: 0.500, my: 0.500, forward: 0 },
+  { img: loadSprite('Hex.png'),   mx: 0.500, my: 0.500, forward: 0 },
+];
+const TURRET_DEFS = [
+  { img: loadSprite('TwinPod.png'), px: 0.500, py: 0.560, forward: -Math.PI / 2, scale: 0.72 },
+  { img: loadSprite('Heavy.png'),   px: 0.420, py: 0.500, forward:  Math.PI,     scale: 0.82 },
+  { img: loadSprite('Needle.png'),  px: 0.620, py: 0.500, forward:  Math.PI,     scale: 0.82 },
+  { img: loadSprite('Stub.png'),    px: 0.500, py: 0.500, forward:  0,           scale: 0.66 },
+];
+// Ease an angle toward a target by `rate` of the shortest signed delta per frame.
+function easeAngle(cur, target, rate) {
+  let d = target - cur;
+  while (d >  Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return cur + d * rate;
+}
 const particles = [];   // impact debris, motorgloed, splinter
 const debris = [];      // faste skibsstykker efter destruktion
 
@@ -2669,7 +2702,11 @@ function spawnEnemy() {
     vx: 0, vy: 0,
     angle: 0,
     aimAngle: 0,
-    radius: 15,
+    // Random hull + turret combo, and a hull heading that drifts on its own.
+    hullType: Math.floor(Math.random() * HULL_DEFS.length),
+    turretType: Math.floor(Math.random() * TURRET_DEFS.length),
+    hullAngle: Math.random() * Math.PI * 2,
+    radius: 18,
     hits: 0,
     dying: false,
     dyingT: 0,
@@ -3103,6 +3140,7 @@ function update(now) {
       e.thrustPower = 1;
       e.thrustAngle = e.targetAngle;
       e.thrusting = true;
+      e.hullAngle = easeAngle(e.hullAngle, e.targetAngle, 0.05);
       e.x += e.vx * dtSec;
       e.y += e.vy * dtSec;
       // Ingen wrap under retreat — skibet skal forsvinde, ikke komme tilbage.
@@ -3142,6 +3180,8 @@ function update(now) {
     e.thrustPower = 1;
     e.thrustAngle = e.targetAngle;
     e.thrusting = true;
+    // Hull noses slowly toward its drift direction, independent of the turret aim.
+    e.hullAngle = easeAngle(e.hullAngle, e.targetAngle, 0.05);
 
     const ESPD = Math.sqrt(e.vx*e.vx + e.vy*e.vy);
     const E_MAX = 110;
@@ -3181,8 +3221,9 @@ function update(now) {
         // e.hits er fra nu af en float.
         const damage = lightBullet ? (1 / 6) : 1;
         e.hits += damage;
-        // Ship-local hit position: inverse rotate (aimAngle) + inverse scale (0.85)
-        const cosA = Math.cos(e.aimAngle), sinA = Math.sin(e.aimAngle);
+        // Ship-local hit position: inverse rotate (hullAngle — marks live on the
+        // hull layer) + inverse scale (0.85)
+        const cosA = Math.cos(e.hullAngle), sinA = Math.sin(e.hullAngle);
         let localX = (bdx * cosA + bdy * sinA) / 0.85;
         let localY = (-bdx * sinA + bdy * cosA) / 0.85;
         // Project onto inner ellipse so marks lander paa skroget
@@ -3477,10 +3518,10 @@ function applyEnemyHit(e, worldNormalX, worldNormalY) {
     }
     return;
   }
-  // Ship-local for fjende: inverse rotate (aimAngle) + inverse scale (0.85)
+  // Ship-local for fjende: inverse rotate (hullAngle) + inverse scale (0.85)
   const wdx = worldNormalX * e.radius;
   const wdy = worldNormalY * e.radius;
-  const cosA = Math.cos(e.aimAngle), sinA = Math.sin(e.aimAngle);
+  const cosA = Math.cos(e.hullAngle), sinA = Math.sin(e.hullAngle);
   let localX = (wdx * cosA + wdy * sinA) / 0.85;
   let localY = (-wdx * sinA + wdy * cosA) / 0.85;
   const A = 12, B = 11;
@@ -4142,182 +4183,56 @@ function drawEnemy(e) {
   // WORLD_SCALE (eksperiment) krymper fjenden yderligere.
   ctx.scale(0.85 * WORLD_SCALE, 0.85 * WORLD_SCALE);
 
-  // Thrust flame
-  if (e.thrusting) {
+  const hull = HULL_DEFS[e.hullType];
+  const turret = TURRET_DEFS[e.turretType];
+
+  // --- Thrust flame: fires from the turret's rocket engine (the rear, opposite
+  // the launcher tip). Same warm palette as before so the enemy reads the same. ---
+  if (e.thrusting && turret && turret.img.complete && turret.img.naturalWidth) {
+    const back = HULL_DESIGN_W * turret.scale * 0.46;   // just behind the turret's rear edge
     ctx.save();
-    ctx.rotate(e.thrustAngle + Math.PI);
+    ctx.rotate(e.aimAngle + Math.PI);
     ctx.globalCompositeOperation = 'lighter';
-    const g = ctx.createRadialGradient(10, 0, 0, 10, 0, 26);
-    g.addColorStop(0, 'rgba(255, 100, 150, 0.8)');
-    g.addColorStop(0.5, 'rgba(200, 40, 80, 0.4)');
+    const g = ctx.createRadialGradient(back, 0, 0, back, 0, 15);
+    g.addColorStop(0, 'rgba(255, 120, 160, 0.75)');
+    g.addColorStop(0.5, 'rgba(200, 50, 90, 0.35)');
     g.addColorStop(1, 'rgba(150, 20, 60, 0)');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.moveTo(10, 0);
-    ctx.quadraticCurveTo(18, -10, 28, 0);
-    ctx.quadraticCurveTo(18, 10, 10, 0);
+    ctx.moveTo(back - 2, 0);
+    ctx.quadraticCurveTo(back + 5, -6, back + 12, 0);
+    ctx.quadraticCurveTo(back + 5, 6, back - 2, 0);
     ctx.fill();
     ctx.restore();
   }
 
-  ctx.rotate(e.aimAngle);
-
-  // ========================================
-  // Heavy capital warship - metallic 3D hull
-  // ========================================
-  // Shadow under the ship
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-  ctx.beginPath();
-  drawEnemyPath(3, 3);
-  ctx.fill();
-
-  // Hull base: dark steel gradient (top deck lighter, ventral hull in shadow)
-  const hullGrad = ctx.createLinearGradient(0, -18, 0, 18);
-  hullGrad.addColorStop(0,    '#5e6470');
-  hullGrad.addColorStop(0.35, '#3a3f48');
-  hullGrad.addColorStop(0.65, '#1c2028');
-  hullGrad.addColorStop(1,    '#080a12');
-  ctx.fillStyle = hullGrad;
-  ctx.beginPath();
-  drawEnemyPath(0, 0);
-  ctx.fill();
-
-  // === Albedo: en stjerne lyser fra en fast retning i verdens-koordinater.
-  // Vi udregner den lokale lysretning per frame saa highlight'et flytter sig
-  // hen over skroget mens skibet roterer. Lyset placeres som en radial highlight
-  // paa sun-facing siden, og en svag skygge laegges paa den modsatte side.
-  const SUN_WORLD_ANGLE = -2.4;     // ~upper-left i skaerm-koordinater
-  const localSunAngle = SUN_WORLD_ANGLE - e.aimAngle;
-  const hx = Math.cos(localSunAngle) * 11;
-  const hy = Math.sin(localSunAngle) * 11;
-  ctx.save();
-  ctx.beginPath();
-  drawEnemyPath(0, 0);
-  ctx.clip();
-  // Bright albedo on sun-facing side
-  const sunGrad = ctx.createRadialGradient(hx, hy, 0, hx, hy, 22);
-  sunGrad.addColorStop(0,   'rgba(225, 235, 250, 0.55)');
-  sunGrad.addColorStop(0.4, 'rgba(170, 185, 210, 0.22)');
-  sunGrad.addColorStop(1,   'rgba(120, 135, 160, 0)');
-  ctx.fillStyle = sunGrad;
-  ctx.fillRect(-22, -22, 44, 44);
-  // Subtle dark terminator on the opposite side
-  const shadowGrad = ctx.createRadialGradient(-hx, -hy, 0, -hx, -hy, 22);
-  shadowGrad.addColorStop(0,   'rgba(0, 0, 5, 0.4)');
-  shadowGrad.addColorStop(0.5, 'rgba(0, 0, 5, 0.18)');
-  shadowGrad.addColorStop(1,   'rgba(0, 0, 5, 0)');
-  ctx.fillStyle = shadowGrad;
-  ctx.fillRect(-22, -22, 44, 44);
-  ctx.restore();
-
-  // === Panel lines / hull plating seams ===
-  ctx.strokeStyle = 'rgba(8, 10, 16, 0.7)';
-  ctx.lineWidth = 0.7;
-  ctx.beginPath();
-  // Longitudinal seams (port/starboard)
-  ctx.moveTo(-13, -9.5); ctx.lineTo(13, -7.5);
-  ctx.moveTo(-13, 9.5);  ctx.lineTo(13, 7.5);
-  // Transverse plate divisions
-  ctx.moveTo(-8, -16); ctx.lineTo(-8, 16);
-  ctx.moveTo(-1, -17); ctx.lineTo(-1, 17);
-  ctx.moveTo(6, -16);  ctx.lineTo(6, 16);
-  ctx.stroke();
-  // Thin highlight on the top edge of each seam (sun catches the lip)
-  ctx.strokeStyle = 'rgba(180, 195, 220, 0.28)';
-  ctx.lineWidth = 0.5;
-  ctx.beginPath();
-  ctx.moveTo(-13, -8.8); ctx.lineTo(13, -6.8);
-  ctx.moveTo(-8, -15.3); ctx.lineTo(-8, -5);
-  ctx.moveTo(-1, -16.3); ctx.lineTo(-1, -5);
-  ctx.moveTo(6, -15.3);  ctx.lineTo(6, -5);
-  ctx.stroke();
-
-  // === Central command housing (raised module above the deck) ===
-  // Shadow first so the structure looks elevated
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-  ctx.beginPath();
-  ctx.ellipse(1.5, 1.2, 6, 4.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Housing
-  const houseGrad = ctx.createRadialGradient(-1 + hx * 0.15, -1 + hy * 0.15, 0.5, 1, 0, 6.5);
-  houseGrad.addColorStop(0,   '#8c94a0');
-  houseGrad.addColorStop(0.5, '#4a5058');
-  houseGrad.addColorStop(1,   '#1c2028');
-  ctx.fillStyle = houseGrad;
-  ctx.beginPath();
-  ctx.ellipse(1, 0, 5.5, 4, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(150, 165, 185, 0.55)';
-  ctx.lineWidth = 0.6;
-  ctx.beginPath();
-  ctx.ellipse(1, 0, 5.5, 4, 0, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // === Glowing forward sensor / eye on the housing ===
-  const eyeGrad = ctx.createRadialGradient(2, 0, 0, 2, 0, 4.5);
-  eyeGrad.addColorStop(0,   'rgba(255, 215, 100, 1)');
-  eyeGrad.addColorStop(0.45, 'rgba(255, 110, 50, 0.95)');
-  eyeGrad.addColorStop(1,   'rgba(150, 25, 15, 0.55)');
-  ctx.fillStyle = eyeGrad;
-  ctx.beginPath();
-  ctx.ellipse(2, 0, 3.2, 2.2, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Bright core
-  ctx.fillStyle = 'rgba(255, 245, 200, 0.85)';
-  ctx.beginPath();
-  ctx.ellipse(2.2, -0.2, 1, 0.7, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // === Heavy side cannons (mounted on port & starboard) ===
-  for (const yOff of [-8.6, 8.6]) {
-    // Mount housing with vertical metallic gradient
-    const cannonGrad = ctx.createLinearGradient(0, yOff - 2, 0, yOff + 2);
-    cannonGrad.addColorStop(0,   '#4a5058');
-    cannonGrad.addColorStop(0.5, '#2a2e34');
-    cannonGrad.addColorStop(1,   '#10131a');
-    ctx.fillStyle = cannonGrad;
-    ctx.fillRect(6.5, yOff - 2, 12, 4);
-    ctx.strokeStyle = 'rgba(120, 135, 155, 0.4)';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(6.5, yOff - 2, 12, 4);
-    // Barrel
-    ctx.fillStyle = '#08090d';
-    ctx.fillRect(13, yOff - 0.9, 7, 1.8);
-    // Sun-side highlight along the barrel top
-    ctx.fillStyle = 'rgba(150, 165, 185, 0.45)';
-    ctx.fillRect(13, yOff - 0.9, 7, 0.4);
-    // Muzzle
-    ctx.fillStyle = '#000';
-    ctx.fillRect(19.5, yOff - 0.6, 0.6, 1.2);
-  }
-
-  // === Engine vents at the stern ===
-  ctx.fillStyle = '#06070b';
-  ctx.fillRect(-15.5, -6, 3, 2.6);
-  ctx.fillRect(-15.5, 3.4, 3, 2.6);
-  ctx.strokeStyle = 'rgba(100, 115, 135, 0.45)';
-  ctx.lineWidth = 0.4;
-  ctx.strokeRect(-15.5, -6, 3, 2.6);
-  ctx.strokeRect(-15.5, 3.4, 3, 2.6);
-  // Hot inner glow only while thrusting (matches main thrust flame)
-  if (e.thrusting) {
+  // --- HULL layer: a passive chassis that drifts toward its own heading ---
+  if (hull && hull.img.complete && hull.img.naturalWidth) {
+    const iw = hull.img.naturalWidth, ih = hull.img.naturalHeight;
+    const s = HULL_DESIGN_W / iw;
     ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = 'rgba(255, 130, 90, 0.7)';
-    ctx.fillRect(-14, -5.4, 0.9, 1.2);
-    ctx.fillRect(-14, 4, 0.9, 1.2);
+    ctx.rotate(e.hullAngle - hull.forward);
+    // Offset so the turret-mount point of the sprite sits exactly on the origin.
+    ctx.drawImage(hull.img, -hull.mx * iw * s, -hull.my * ih * s, iw * s, ih * s);
     ctx.restore();
   }
 
-  // === Outline: subtle cool metallic edge ===
-  ctx.strokeStyle = 'rgba(160, 175, 200, 0.55)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  drawEnemyPath(0, 0);
-  ctx.stroke();
-
-  // === Damage marks: cracks (hit 1-2), fire (hit 3-4); under dying vokser flammer ===
+  // --- Damage marks: cracks / fire, painted on the hull in the hull's frame ---
+  ctx.save();
+  ctx.rotate(e.hullAngle);
   drawDamageMarks(e);
+  ctx.restore();
+
+  // --- TURRET layer: engine + launcher unit that rotates to aim at the player ---
+  if (turret && turret.img.complete && turret.img.naturalWidth) {
+    const iw = turret.img.naturalWidth, ih = turret.img.naturalHeight;
+    const s = (HULL_DESIGN_W * turret.scale) / iw;
+    ctx.save();
+    ctx.rotate(e.aimAngle - turret.forward);
+    // Offset so the turret's rotation pivot sits exactly on the origin (the mount).
+    ctx.drawImage(turret.img, -turret.px * iw * s, -turret.py * ih * s, iw * s, ih * s);
+    ctx.restore();
+  }
 
   ctx.restore();
 }
