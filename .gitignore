@@ -13,3 +13,11 @@ desktop.ini
 *.bak
 *_backup.html
 scratch/
+
+# Android / Play-pakke — MAA ALDRIG i offentligt repo (hemmelig noegle + passwords)
+*.zip
+*.keystore
+*.jks
+signing-key-info.txt
+*.apk
+*.aab

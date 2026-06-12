@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.myllkan.stellardrift",
+      "sha256_cert_fingerprints": [
+        "81:BB:F1:D4:9E:DB:33:35:9E:38:02:46:3F:C9:5B:61:06:1D:82:52:59:28:AF:0D:29:CB:89:C1:DB:3E:38:BB"
+      ]
+    }
+  }
+]
