@@ -2105,8 +2105,8 @@ function scaleAbout(px, py, s) {
 // starterskibet (foer foerste shop-besoeg); 'ship-tiny' kobles paa hvis spilleren
 // har koebt det i quartermaster-shoppen.
 const SHIP_TYPES = {
-  'default':   { scale: 1.0, radius: 14, maxHits: 10 },
-  'ship-tiny': { scale: 0.5, radius: 7,  maxHits: 5  }
+  'default':   { scale: 1.0, radius: 14, maxHits: 10, accel: 1.00 },
+  'ship-tiny': { scale: 0.5, radius: 7,  maxHits: 5,  accel: 1.30 }   // lav masse -> 30% mere adraet
 };
 // Hvilket skib spilleren bruger naeste gang en simulation starter. LAUNCH i
 // shoppen overskriver denne med det koebte skib.
@@ -2843,7 +2843,8 @@ function update(now) {
   // Apply acceleration opposite to thruster orientation (flame pushes ship).
   // MAX_SPEED-cap'en aendres ikke af mood — humøret aendrer hvor hurtigt man
   // accelerere, ikke topfart. Det holder kapitalskib-feel uden bizarre flyverier.
-  const THRUST = 60 * moodFx().thrust;   // mood-skaleret accel
+  const shipAccel = (SHIP_TYPES[equippedShip] || SHIP_TYPES['default']).accel || 1;
+  const THRUST = 60 * moodFx().thrust * shipAccel;   // mood- og skib-skaleret accel
   const accelAngle = player.thrusterAngle + Math.PI;
   const ax = Math.cos(accelAngle) * THRUST * player.throttle;
   const ay = Math.sin(accelAngle) * THRUST * player.throttle;
