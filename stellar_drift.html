@@ -800,8 +800,8 @@
 
 <div id="portrait">
   <div class="label">PILOT · BRIAN</div>
-  <div class="frame"><img id="portraitImg" src="BrianGrief.jpeg" alt="Brian"></div>
-  <div class="mood" id="portraitMood">GRIEF</div>
+  <div class="frame"><img id="portraitImg" src="BrianContent.jpeg" alt="Brian"></div>
+  <div class="mood" id="portraitMood">CONTENT</div>
 </div>
 
 <div id="phase">
@@ -1034,8 +1034,11 @@ const BRIAN_MOODS = [
   'Apathy', 'Grief', 'Afraid', 'Angry', 'Antagonistic',
   'Content', 'StrongInterest', 'Cheerful', 'Enthusiastic', 'Serenity'
 ];
-const BRIAN_DEFAULT = 'Grief';   // Brian starter i sorg — sat op af foerste cutscene.
+const BRIAN_DEFAULT = 'Content';   // Foerste mission: Brian er afklaret. Sorgen kommer FOERST efter den soergelige cutscene.
 let brianMood = BRIAN_DEFAULT;
+// Hvilket humoer et nyt liv starter i. Content foer cutscenen; saettes til 'Grief'
+// i endFamilyCutscene(), saa sorgen foerst rammer EFTER tabet — ikke fra start.
+let brianStartMood = BRIAN_DEFAULT;
 // Preload alle 10 portrætter, saa skift ikke flickerer i kampens hede.
 const brianPortraits = Object.fromEntries(
   BRIAN_MOODS.map(m => {
@@ -1051,16 +1054,17 @@ function setBrianMood(mood) {
   portraitImgEl.src = 'Brian' + mood + '.jpeg';
   portraitMoodEl.textContent = mood.replace(/([A-Z])/g, ' $1').trim().toUpperCase();
 }
-// Humøret skifter LANGSOMT: det kraever 3 kills for ét trin op, eller 3 hits for
-// ét trin ned. brianMoodProgress er en net-taeller — kill +1, hit -1. Naar den
-// rammer +3 gaar humøret ét trin op (taelleren nulstilles); rammer den -3 gaar
+// Humøret skifter LANGSOMT: det kraever 2 kills for ét trin OP, eller 3 hits for
+// ét trin NED. brianMoodProgress er en net-taeller — kill +1, hit -1. Naar den
+// rammer +2 gaar humøret ét trin op (taelleren nulstilles); rammer den -3 gaar
 // det ét trin ned. Saa et enkelt kill eller hit rykker ikke tonen alene; kills og
 // hits modregner hinanden undervejs. Nulstilles ved respawn.
-const BRIAN_STEP_THRESHOLD = 3;
+const BRIAN_STEP_UP = 2;     // 2 kills -> ét trin op (lettere optrapning)
+const BRIAN_STEP_DOWN = 3;   // 3 hits  -> ét trin ned (uaendret)
 let brianMoodProgress = 0;
 function brianOnHit() {
   brianMoodProgress--;
-  if (brianMoodProgress <= -BRIAN_STEP_THRESHOLD) {
+  if (brianMoodProgress <= -BRIAN_STEP_DOWN) {
     brianMoodProgress = 0;
     const idx = BRIAN_MOODS.indexOf(brianMood);
     // Apathy (idx 0) er bunden — kan ikke gaa lavere.
@@ -1069,7 +1073,7 @@ function brianOnHit() {
 }
 function brianOnKill() {
   brianMoodProgress++;
-  if (brianMoodProgress >= BRIAN_STEP_THRESHOLD) {
+  if (brianMoodProgress >= BRIAN_STEP_UP) {
     brianMoodProgress = 0;
     const idx = BRIAN_MOODS.indexOf(brianMood);
     // Serenity (top) er loftet — kan ikke gaa hoejere.
@@ -2198,9 +2202,9 @@ function spawnPlayer() {
   heatBlockEl.classList.toggle('visible', equippedWeapon === 'weapon-mg');
   updateHullHUD();
   updateHeatHUD();
-  // Brian starter altid i sorg (BRIAN_DEFAULT) ved nyt liv. Fremdrift nulstilles.
+  // Brian starter i brianStartMood ved nyt liv (Content foer cutscenen, Grief efter). Fremdrift nulstilles.
   brianMoodProgress = 0;
-  setBrianMood(BRIAN_DEFAULT);
+  setBrianMood(brianStartMood);
   mgStuckFire = false;
   laserCharge = 0;
   laserTarget = null;
@@ -2652,6 +2656,9 @@ function endFamilyCutscene() {
   markFamilyCutsceneSeen();
   familyCutsceneEl.classList.remove('visible');
   familyCutsceneVisible = false;
+  // Tabet har ramt: fra nu af starter nye liv i sorg (indtil spilleren selv
+  // arbejder sig op igen via kills). Foer cutscenen var starten Content.
+  brianStartMood = 'Grief';
   // VIGTIGT: Travel-musikken stoppes IKKE her. Den fortsætter ind i shoppen
   // som klangbund. openShop() ved at den skal lade Travel være.
   openShop();
@@ -2678,6 +2685,9 @@ familyCutsceneVideo.addEventListener('timeupdate', () => {
 function startGameFromTitle() {
   titleVisible = false;
   titleEl.classList.remove('visible');
+  // Ny gennemspilning: start forfra i Content (sorgen kommer foerst efter cutscenen).
+  brianStartMood = BRIAN_DEFAULT;
+  setBrianMood(BRIAN_DEFAULT);
   stopTitleMusic();
   playGameMusic();
   // Nulstil dt-akkumulering saa update'en ikke faar en kaempe foerste delta.
