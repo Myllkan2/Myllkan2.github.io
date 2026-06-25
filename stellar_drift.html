@@ -149,7 +149,7 @@
   }
   /* --- Touch controls (kun synlige paa touch-enheder) --- */
   #touchControls { display: none; }
-  body.touch #touchControls { display: block; }
+  body.touch.combat #touchControls { display: block; }   /* kun under kamp — ikke i shop/titel/cutscene */
   body.touch #controls { display: none; }       /* skjul tastatur-hint paa touch */
   canvas { touch-action: none; }
   /* Joystick: en ring man holder nede og traekker fingeren i — retning + gas */
@@ -771,6 +771,26 @@
 
     /* Phase-label kan rykke op naar portraettet er mindre */
     #phase { top: 150px; }
+
+    /* Shop: skaler tekst saa den ikke flyder ud til margenerne paa smalle skaerme */
+    #shop { padding: 24px 16px 32px; }
+    #shop .coin-counter { font-size: 24px; letter-spacing: 2px; margin-bottom: 18px; }
+    #shop .shop-title { font-size: 24px; letter-spacing: 6px; }
+    #shop .shop-subtitle { font-size: 9px; letter-spacing: 4px; margin-bottom: 16px; }
+    #shop .cockpit-caption { letter-spacing: 3px; margin-bottom: 24px; }
+    #shop .shop-categories { gap: 22px 24px; margin-bottom: 26px; }
+  }
+
+  /* Liggende telefon (lav skaerm): komprimér shoppen, og kryb skib-billedet sammen,
+     saa man kan scrolle ned til LAUNCH uden uendelig scroll. */
+  @media (max-height: 520px) {
+    #shop { padding: 16px 18px 28px; }
+    #shop .coin-counter { font-size: 20px; letter-spacing: 2px; margin-bottom: 12px; }
+    #shop .shop-title { font-size: 20px; letter-spacing: 5px; }
+    #shop .shop-subtitle { font-size: 8px; letter-spacing: 3px; margin-bottom: 10px; }
+    #shop .cockpit-pic { width: min(64vh, 70vw); margin-bottom: 8px; }
+    #shop .cockpit-caption { margin-bottom: 16px; }
+    #shop .shop-categories { gap: 16px 28px; margin-bottom: 18px; }
   }
 </style>
 </head>
