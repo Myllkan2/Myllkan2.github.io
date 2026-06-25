@@ -2901,10 +2901,10 @@ function update(now) {
   //  • Touch + maskingevaer: hold sigte-joysticken nede (+ retning) = autofire,
   //    ligesom paa PC. MG'et har sin egen overheat-bar, saa hold-fyring passer.
   const mgHeld = aimstick.active && aimstick.mag > 0;   // sigte-joysticken holdes nede
-  // MG + laser fyres ved at HOLDE (touch: hold sigte-joysticken); raket/rusty er enkeltskud pr. tryk.
-  const holdWeapon = (equippedWeapon === 'weapon-mg' || equippedWeapon === 'weapon-laser');
+  // Touch: ALLE vaaben autofyrer ved at HOLDE sigte-joysticken — som paa desktop med musen.
+  // Raket/rusty pacet af deres magasin/reload-cooldown (180/900ms); MG/laser af egen rate.
   const trigger = touchModeOn
-    ? (holdWeapon ? mgHeld : touchFireRequest)
+    ? mgHeld
     : mouse.down;
   if (equippedWeapon === 'weapon-laser') {
     updateLaser(trigger, dtSec);
