@@ -289,7 +289,7 @@
      i loop'en) — samme stil som mobil-udgaven — saa rumskibet kan ses bagved. */
   #portrait { transition: opacity 0.4s ease; }
   body.combat #portrait { opacity: 0.5; }
-  #gameOver, #titleScreen, #victory, #cutscene, #ambushWin, #familyCutscene {
+  #gameOver, #titleScreen, #victory, #cutscene, #ambushWin, #familyCutscene, #homeEnding {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     display: flex;
@@ -475,6 +475,49 @@
     font-size: 12px;
     letter-spacing: 4px;
     color: rgba(200, 220, 240, 0.7);
+    animation: gov-blink 1.5s ease-in-out infinite;
+  }
+  /* HOME-ending: rolig, kølig blå-tone (hjemkomst), men cliffhanger-uro i teksten. */
+  #homeEnding.visible {
+    opacity: 1;
+    transition: opacity 1.6s ease-in 2.4s;   /* samme rolige timing som ambush-win */
+    background: rgba(2, 6, 14, 0.66);
+  }
+  #homeEnding .title {
+    font-size: 60px;
+    letter-spacing: 18px;
+    font-weight: 300;
+    color: rgba(190, 215, 245, 0.95);
+    text-shadow: 0 0 30px rgba(120, 170, 230, 0.6), 0 0 75px rgba(50, 100, 180, 0.4);
+    margin-bottom: 12px;
+    text-align: center;
+  }
+  #homeEnding .subtitle {
+    font-size: 12px;
+    letter-spacing: 8px;
+    color: rgba(150, 180, 220, 0.6);
+    margin-bottom: 32px;
+  }
+  #homeEnding .story {
+    font-size: 15px;
+    letter-spacing: 1.5px;
+    line-height: 1.75;
+    color: rgba(225, 235, 248, 0.86);
+    max-width: 680px;
+    text-align: center;
+    margin-bottom: 38px;
+    padding: 0 40px;
+    text-shadow: 0 0 10px rgba(70, 130, 200, 0.2);
+  }
+  #homeEnding .story strong {
+    color: rgba(210, 230, 255, 0.96);
+    font-weight: 400;
+    letter-spacing: 2px;
+  }
+  #homeEnding .prompt {
+    font-size: 12px;
+    letter-spacing: 4px;
+    color: rgba(190, 215, 245, 0.7);
     animation: gov-blink 1.5s ease-in-out infinite;
   }
   /* Family-cutscene: melankolsk video-mellemspil mellem ambush-win og shop.
@@ -884,7 +927,7 @@
       <circle cx="14" cy="14" r="12" fill="url(#coinGrad)" stroke="#3d2a08" stroke-width="0.8"/>
       <circle cx="14" cy="14" r="9" fill="none" stroke="rgba(60,40,5,0.45)" stroke-width="0.6"/>
     </svg>
-    <span id="coinAmount">1050</span>
+    <span id="coinAmount">250</span>
   </div>
   <div class="shop-title">QUARTERMASTER</div>
   <div class="shop-subtitle">EQUIP FOR NEXT MISSION</div>
@@ -1000,6 +1043,19 @@
   <div class="prompt">PRESS ANY KEY TO CONTINUE</div>
 </div>
 
+<!-- HOME-ending: cliffhanger naar sidste stop (HOME APPROACH) er ryddet. Hjemme,
+     men ikke trygt — aabner for et naeste kapitel uden at love det nu. -->
+<div id="homeEnding">
+  <div class="title">HOME</div>
+  <div class="subtitle">JOURNEY'S END</div>
+  <div class="story">
+    The last engine spools down into the dark. Silence.<br><br>
+    You drift into the home berth you left years ago — and the dock is cold. No welcome lights. No signal. Only a single channel, open and breathing static, as if something there had been waiting a very long time for you to arrive.<br><br>
+    <strong>This isn't over, Brian.</strong>
+  </div>
+  <div class="prompt">TO BE CONTINUED &nbsp;—&nbsp; PRESS ANY KEY</div>
+</div>
+
 <!-- Family-cutscene: spilles efter ambush-win, foer shop. Veo-genereret video
      med Brians familiebillede og halvtomt whiskeyglas; Travel-musikken bærer scenen. -->
 <div id="familyCutscene">
@@ -1040,6 +1096,10 @@ const familyCutsceneEl = document.getElementById('familyCutscene');
 const familyCutsceneVideo = document.getElementById('familyCutsceneVideo');
 const familyCutsceneSubtitleEl = document.getElementById('familyCutsceneSubtitle');
 const familyCutsceneSkipBtn = document.getElementById('familyCutsceneSkipBtn');
+const homeEndingEl = document.getElementById('homeEnding');
+const cutsceneSubtitleEl = cutsceneEl.querySelector('.subtitle');
+const cutsceneStoryEl = cutsceneEl.querySelector('.story');
+const shopSubtitleEl = document.querySelector('#shop .shop-subtitle');
 const hullFillEl = document.getElementById('hullFill');
 const hullPctEl = document.getElementById('hullPct');
 const heatBlockEl = document.getElementById('heatBlock');
@@ -1185,6 +1245,13 @@ let cutsceneVisible = false;
 // gennemspilning tvinges; senere visninger kan springes over via knappen.
 let familyCutsceneVisible = false;
 let familyCutsceneSkipTimer = null;
+// Per-gennemspilning: family-cutscenen spilles KUN én gang pr. spil (efter foerste
+// baghold) og gentages aldrig mellem de senere stop. Det er ogsaa dette flag der
+// aktiverer baggrunds-playlisten, saa den starter paalideligt uanset om localStorage
+// 'seen'-flaget allerede er sat fra en tidligere session. Nulstilles ved nyt spil.
+let familyCutscenePlayed = false;
+// localStorage 'seen' bruges nu KUN til skip-knappens synlighed paa tvaers af
+// sessioner (har du nogensinde set scenen, maa du springe den over).
 const FAMILY_CUTSCENE_SEEN_KEY = 'stellardrift.cutscene.familyPhoto.seen';
 // Ambush-win: 10 kills i post-graduation missionen. Spillet kører videre (saa
 // fjenderne kan flygte ud og raketter kan dø ud) men kollisioner er slaaet fra.
@@ -1193,6 +1260,35 @@ let ambushWon = false;
 // Input-lockout: forhindrer at en tast under retreat-sekvensen straks lukker
 // overlayet, foer spilleren har naaet at se flugten + laese noten.
 let ambushInputReady = false;
+
+// ===== REJSEN HJEM (phase 2+): endeligt loop i stedet for uendeligt ambush =========
+// Hvert LAUNCH spiller ÉT stop paa vejen hjem. `legIndex` peger paa det stop der
+// spilles nu og overlever doed/restart (som hasGraduated) — doer man, genspiller man
+// SAMME stop. Vinder man et ikke-sidste stop: normal PIRATES-BREAK-OFF -> shop, og
+// legIndex rykker ét frem (i triggerAmbushWin). Vinder man det SIDSTE stop: HOME-
+// ending (cliffhanger) i stedet for shop. Sværhedskurven er balanceret: lidt flere/
+// haardere fjende-boelger + hoejere kill-maal pr. stop. Spawn-grenen i loopet
+// ([hasGraduated]) laeser leg-parametrene; tutorial-fasen er uaendret.
+const HOME_LEGS = [
+  { name: 'ASTEROID CORRIDOR', killTarget: 5, cap: 6, waveMin: 3, waveSpan: 4, gapMin: 10000, gapSpan: 6000,
+    story: "Fresh license in your pocket and the keys to your <strong>first vessel</strong>, you set course for home.<br><br>"
+         + "But the trade lanes aren't what they used to be. Halfway through the asteroid corridor your comms light up — scrap-rigged engines, pirate signatures closing fast. No life signs aboard — just unmanned drone hulls the cartels set loose to pick off graduates like you.<br><br>"
+         + "There's no turning back, <strong>Brian</strong>. Fight your way home." },
+  { name: 'NEBULA VEIL', killTarget: 8, cap: 7, waveMin: 4, waveSpan: 3, gapMin: 9000, gapSpan: 5000,
+    story: "The corridor falls behind you, but home is still a long way off.<br><br>"
+         + "You slip into the <strong>Nebula Veil</strong> — sensors half-blind in the glowing murk, the hull groaning against the drift. They were waiting in it. More hulls this time, heavier, and they don't scatter as easily.<br><br>"
+         + "Hold the line, <strong>Brian</strong>. You're closer than you were." },
+  { name: 'HOME APPROACH', killTarget: 12, cap: 8, waveMin: 4, waveSpan: 4, gapMin: 8000, gapSpan: 5000,
+    story: "There — through the haze, the pale light of <strong>home</strong>. Close enough to feel the dock lamps.<br><br>"
+         + "But the cartels know exactly where graduates run to. The whole pack has come to meet you at the doorstep — every hull they had left, thrown into one last gauntlet.<br><br>"
+         + "One more time, <strong>Brian</strong>. Bring it home." }
+];
+let legIndex = 0;
+function currentLeg() { return HOME_LEGS[Math.min(legIndex, HOME_LEGS.length - 1)]; }
+function isFinalLeg() { return legIndex >= HOME_LEGS.length - 1; }
+// Home-ending-state: cliffhanger naar sidste stop er ryddet. Genbruger ambushWon's
+// retreat/kollisions-fri slut-tilstand, men viser sit eget overlay (ikke family-cutscenen).
+let homeEndingVisible = false;
 // Den lejede MG er en engangs-smagsprøve i tutorialen. Naar den udløber efter
 // bagholdet saettes mgRetired=true: MG'en forsvinder fra shoppen for altid, og
 // spillerens egne (håbløse) våben — Old Rusty Spacegun, Weak Laser — bliver i
@@ -1201,11 +1297,16 @@ let mgRetired = false;
 // Spillerens vedvarende pung + ejede items. Start-kapital 1050 (saettes her een
 // gang ved script-load). Nulstilles IKKE ved shop-besoeg — coins tjenes som dusør
 // i kamp og bruges over flere besoeg; købte skibe/items bevares.
-let coins = 1050;
+// Tiny-skibet er FORUDVALGT fra start: licensen giver dig allerede Drifteren, og
+// cockpit-billedet i shoppen viser den. De 800 trækkes med det samme (1050-800=250),
+// saa oekonomien er praecis som foer — kun selve klikket er fjernet. Se buyItem,
+// der spaerrer for at "saelge" starter-skibet igen (eneste skib -> ingen grund).
+const STARTER_SHIP = 'ship-tiny';
+let coins = 1050 - 800;
 // ship: enkelt-slot (ét skib ad gangen). De øvrige er multi-slots (lister) — man
 // kan eje flere vaaben/tilbehoer/rengoeringer samtidig. SLOT_LISTS mapper et items
 // data-slot til den liste det havner i, saa buyItem kan haandtere dem generisk.
-let owned = { ship: null, weapons: [], accessories: [], cleaning: [] };
+let owned = { ship: STARTER_SHIP, weapons: [], accessories: [], cleaning: [] };
 const SLOT_LISTS = { weapon: 'weapons', accessory: 'accessories', cleaning: 'cleaning' };
 
 function playTrack(el) {
@@ -1243,6 +1344,43 @@ function fadeInTravelMusic(target = 0.55, duration = 1500) {
     travelMusicEl.volume = Math.min(target, (i / steps) * target);
     if (i >= steps) { clearInterval(travelFadeTimer); travelFadeTimer = null; }
   }, stepTime);
+}
+
+// ===== BAGGRUNDS-PLAYLISTE (aktiveres ved foerste family-cutscene) =================
+// To sange veksler og spilles HVER HELT UD (loop OFF) — aldrig klippet af shop/kamp-
+// skift: Travel ("sangen der gaar i gang ved cutscenen") + stellar-drift-beginning
+// (kampsporet). Travel starter playlisten ved cutscenen; naar et spor slutter spilles
+// det andet — i ring, saa Travel hoeres hver anden gang. Foer cutscenen er musikken
+// uaendret (titelmusik paa titelskaerm, kampsporet i loop under traening + 1. baghold).
+// Naar playlisten er aktiv lader vi musikken loebe frit: shop/kamp/cutscene-skift
+// stopper eller genstarter den IKKE (saa hver sang faktisk naar at spille faerdig).
+const PLAYLIST_TRACKS = [travelMusicEl, gameMusicEl];
+const PLAYLIST_VOL = 0.55;
+let playlistMode = false;
+let playlistIdx = 0;
+function playlistPlayCurrent() {
+  const el = PLAYLIST_TRACKS[playlistIdx];
+  el.loop = false;            // skal slutte naturligt saa 'ended' kan skifte spor
+  el.volume = PLAYLIST_VOL;
+  el.currentTime = 0;
+  const p = el.play();
+  if (p) p.catch(() => {});
+}
+function playlistAdvance() {
+  playlistIdx = (playlistIdx + 1) % PLAYLIST_TRACKS.length;
+  playlistPlayCurrent();
+}
+// Naar et playliste-spor slutter -> naeste spor (kun naar playlisten er aktiv).
+PLAYLIST_TRACKS.forEach(el => {
+  el.addEventListener('ended', () => { if (playlistMode) playlistAdvance(); });
+});
+// Start playlisten paa Travel (spor 0). Travel selv startes med fade-in af
+// startFamilyCutscene; her saetter vi blot mode + idx + loop=off. Senere spor-skift
+// gaar via 'ended' -> playlistAdvance.
+function enterPlaylistAtTravel() {
+  playlistMode = true;
+  playlistIdx = 0;
+  PLAYLIST_TRACKS.forEach(el => { el.loop = false; });
 }
 
 // Forsoeg at starte titelmusikken med det samme — fungerer hvis brugeren allerede
@@ -1747,12 +1885,20 @@ window.addEventListener('keydown', e => {
     if (isMovementKey) e.preventDefault();
     return;
   }
+  // HOME-ending: cliffhanger efter sidste stop. Skal afbrydes FOER ambushWon-
+  // grenen (den deler retreat-tilstand) — ellers ville en tast starte family-
+  // cutscenen i stedet. En tast starter en frisk rejse.
+  if (homeEndingVisible) {
+    if (!e.repeat && ambushInputReady) startNewJourney();
+    if (isMovementKey) e.preventDefault();
+    return;
+  }
   // Ambush-win: enhver tast tager spilleren videre — foerst gennem family-
   // cutscenen (melankolsk pilot-rum), derefter ind i shoppen. Foerst naar
   // input-lockouten er sluppet (saa retreat-sekvensen + noten ikke springes
   // over hvis spilleren rammer en tast i samme oejeblik).
   if (ambushWon) {
-    if (!e.repeat && ambushInputReady) startFamilyCutscene();
+    if (!e.repeat && ambushInputReady) proceedAfterAmbush();
     if (isMovementKey) e.preventDefault();
     return;
   }
@@ -1797,8 +1943,8 @@ window.addEventListener('keydown', e => {
   if (!hasGraduated || ambushWon) return;
   if (!player.alive || player.dying) return;
   if (titleVisible || victoryVisible || shopVisible || cutsceneVisible || familyCutsceneVisible) return;
-  pirateKills = 9;
-  console.log('[CHEAT] pirateKills =', pirateKills, '— naeste kill udloeser ambush-win');
+  pirateKills = currentLeg().killTarget - 1;
+  console.log('[CHEAT] pirateKills =', pirateKills, '/', currentLeg().killTarget, '— naeste kill rydder stop', legIndex + 1);
 });
 
 canvas.addEventListener('mousemove', e => {
@@ -1836,7 +1982,8 @@ function overlayActive() {
 function advanceOverlayOnTouch() {
   if (titleVisible)        { startGameFromTitle(); return true; }
   if (victoryVisible)      { openShop(); return true; }
-  if (ambushWon)           { if (ambushInputReady) startFamilyCutscene(); return true; }
+  if (homeEndingVisible)   { if (ambushInputReady) startNewJourney(); return true; }
+  if (ambushWon)           { if (ambushInputReady) proceedAfterAmbush(); return true; }
   if (familyCutsceneVisible) return false;  // kun skip-knappen (DOM 'click')
   if (shopVisible)           return false;  // shoppen styres af DOM-knapper
   if (cutsceneVisible)     { cutsceneEl.classList.remove('visible'); cutsceneVisible = false; restartGame(); return true; }
@@ -2258,6 +2405,9 @@ function restartGame() {
   ambushWinEl.classList.remove('visible');
   ambushWon = false;
   ambushInputReady = false;
+  // Defensiv: home-ending kan stadig staa hvis logikken kalder restartGame midt i.
+  homeEndingEl.classList.remove('visible');
+  homeEndingVisible = false;
   // Defensiv: family-cutscene kan teoretisk stadig hænge hvis logikken kalder
   // restartGame midt i en overgang. Ryd op og stop Travel saa intet leaker.
   familyCutsceneEl.classList.remove('visible');
@@ -2266,11 +2416,16 @@ function restartGame() {
   clearTimeout(familyCutsceneSkipTimer);
   if (!familyCutsceneVideo.paused) familyCutsceneVideo.pause();
   clearFamilyCutsceneSubtitle();
-  stopTravelMusic();
   pirateKills = 0;
   mouse.down = false;   // forhindrer at LMB-klik paa LAUNCH-knappen straks affyrer kanonen
-  stopTitleMusic();
-  playGameMusic();
+  // Musik: foer playlist-mode skifter vi tilbage til kampsporet (som foer). Naar
+  // playlisten er aktiv lader vi den loebe uforstyrret — ingen stop/genstart her,
+  // saa sangen kan spille faerdig hen over kampen.
+  if (!playlistMode) {
+    stopTravelMusic();
+    stopTitleMusic();
+    playGameMusic();
+  }
   stopThrust();   // defensiv: ingen lingering thrust efter restart
 }
 
@@ -2303,17 +2458,23 @@ function openShop() {
   // ved naeste besoeg, og resterende coins baeres med. (Engangs-init sker via
   // `let coins`/`let owned`-deklarationerne ved script-load.)
   updateShopUI();
+  // Rejse-fremdrift: vis hvilket stop der venter (sektor + STOP x OF N), saa
+  // shoppen foeles som en station undervejs hjem, ikke en uendelig grind-loop.
+  shopSubtitleEl.textContent = (isFinalLeg() ? 'FINAL APPROACH' : 'STOP ' + (legIndex + 1) + ' OF ' + HOME_LEGS.length)
+    + '  ·  ' + currentLeg().name;
   shopVisible = true;
   shopEl.classList.add('visible');
-  // Shoppen er en rolig forberedelsesfase. Kommer vi fra family-cutscenen
-  // lader vi Travel-musikken køre videre — den emotionelle klangbund skal
-  // ikke brydes af et musik-skift. Ellers (foerste shop-besoeg efter
-  // graduation) skifter vi til titelmusikken som foer.
-  stopGameMusic();
-  if (travelMusicEl.paused) {
-    playTitleMusic();
-  } else {
-    stopTitleMusic();   // defensiv: Travel kører, ingen andre spor i baggrunden
+  // Shoppen er en rolig forberedelsesfase. Naar baggrunds-playlisten er aktiv
+  // (efter foerste family-cutscene) lader vi den loebe uforstyrret videre — intet
+  // musik-skift. Foer da: foerste shop-besoeg efter graduation skifter til
+  // titelmusikken som foer.
+  if (!playlistMode) {
+    stopGameMusic();
+    if (travelMusicEl.paused) {
+      playTitleMusic();
+    } else {
+      stopTitleMusic();   // defensiv: Travel kører, ingen andre spor i baggrunden
+    }
   }
   stopThrust();
 }
@@ -2324,6 +2485,9 @@ function buyItem(id, cost, slot) {
   // (30) og saa ikke har raad til et skib.
   if (slot === 'ship') {
     if (owned.ship === id) {
+      // Starter-skibet kan ikke saelges fra (eneste skib + forudvalgt) — ellers
+      // kunne man ved et uheld klikke launch-evnen vaek. Andre skibe kan fortrydes.
+      if (id === STARTER_SHIP) return;
       owned.ship = null;
       coins += cost;
       updateShopUI();
@@ -2395,15 +2559,19 @@ shopLaunchBtn.addEventListener('click', () => {
   const WEAPON_PRIORITY = ['weapon-mg', 'weapon-rl', 'weapon-laser', 'weapon-rusty'];
   const eq = WEAPON_PRIORITY.find(w => owned.weapons.includes(w));
   if (eq) equippedWeapon = eq;
-  // Vis ambush-cutscenen foer kampen — spilleren trykker en tast for at engage.
+  // Vis ambush-cutscenen foer kampen — teksten skifter pr. rejse-stop (sektor +
+  // STOP x OF N + leg'ets egen historie), saa hvert stop foeles som et nyt sted.
+  const leg = currentLeg();
+  cutsceneSubtitleEl.textContent = leg.name + '  ·  STOP ' + (legIndex + 1) + ' OF ' + HOME_LEGS.length;
+  cutsceneStoryEl.innerHTML = leg.story;
   shopEl.classList.remove('visible');
   shopVisible = false;
   cutsceneEl.classList.add('visible');
   cutsceneVisible = true;
-  // Travel-musikken har baaret shoppen hvis vi kom fra family-cutscenen —
-  // nu skal vi tilbage i kamp-mode, saa skift over til text-cutscene-stilhed.
-  // (gameMusic starter naar selve kampen begynder via restartGame.)
-  stopTravelMusic();
+  // Foer playlist-mode: Travel bar shoppen, og vi klippede den her foer kampen.
+  // I playlist-mode lader vi sangen spille faerdig hen over kampen (ingen klip) —
+  // den skifter selv til naeste spor naar den er helt ude.
+  if (!playlistMode) stopTravelMusic();
 });
 
 // ============================================================================
@@ -2550,13 +2718,24 @@ function triggerVictory() {
 // kører videre saa fjenderne kan thrust off-screen og raketterne kan dø ud;
 // alle kollisioner er slaaet fra fra og med dette tidspunkt.
 // Dusør pr. draebt pirat — udbetales naar kampen er ovre. 12 coins/kill, saa
-// bagholdets 10 kills giver 120 coins. Laegges i den vedvarende pung (coins
-// nulstilles ikke laengere ved shop-besoeg), saa belønningen overlever ind i shoppen.
+// foerste stop (5 kills) giver 60 coins, senere stop mere (kill-maal 5/8/12).
+// Laegges i den vedvarende pung (coins nulstilles ikke laengere ved shop-besoeg),
+// saa belønningen overlever ind i shoppen.
 const BOUNTY_PER_KILL = 12;
+
+// Et stop er ryddet: sidste stop -> HOME-ending (cliffhanger); ellers normal
+// PIRATES-BREAK-OFF -> family-cutscene -> shop, og rejsen rykker ét stop frem.
+function triggerLegWin() {
+  if (isFinalLeg()) triggerHomeEnding();
+  else triggerAmbushWin();
+}
 
 function triggerAmbushWin() {
   ambushWon = true;
   ambushInputReady = false;
+  // Rejsen rykker ét stop frem — naeste LAUNCH spiller det haardere stop, og
+  // AMBUSH-cutscenen viser dets sektor-tekst. (Sidste stop gaar aldrig hertil.)
+  legIndex = Math.min(legIndex + 1, HOME_LEGS.length - 1);
   const bounty = BOUNTY_PER_KILL * pirateKills;
   coins += bounty;
   ambushBountyEl.innerHTML = 'BOUNTY COLLECTED &nbsp; +' + bounty + ' <span class="coin-pip"></span>';
@@ -2582,6 +2761,33 @@ function triggerAmbushWin() {
   // giv et lille buffer ovenpaa saa spilleren faktisk naar at se flugten og
   // laese noten foer en tilfaeldig tast lukker overlayet.
   setTimeout(() => { ambushInputReady = true; }, 4800);
+}
+
+// Sidste stop ryddet: HOME-ending. Genbruger ambushWon's retreat/kollisions-fri
+// slut-tilstand (fjenderne flygter, raketter dør ud), men viser HOME-overlayet i
+// stedet for ambush-win-noten + family-cutscenen. Dusoer udbetales som normalt.
+function triggerHomeEnding() {
+  ambushWon = true;          // genbrug "kampen er ovre"-tilstanden (retreat + ingen kollision)
+  homeEndingVisible = true;
+  ambushInputReady = false;
+  coins += BOUNTY_PER_KILL * pirateKills;
+  for (const b of enemyBullets) {
+    if (b.life > 900) b.life = 900;
+    b.burnerOn = false;
+  }
+  homeEndingEl.classList.add('visible');
+  setTimeout(() => { ambushInputReady = true; }, 4800);
+}
+
+// Fra HOME-ending: start en frisk rejse (stop 1) men behold pung + ejede items
+// (en blød NG+). Tilbage i shoppen, klar til at flyve ud igen.
+function startNewJourney() {
+  homeEndingEl.classList.remove('visible');
+  homeEndingVisible = false;
+  ambushWon = false;
+  ambushInputReady = false;
+  legIndex = 0;
+  openShop();
 }
 
 // ===== FAMILY-CUTSCENE (post-ambush, pre-shop) =====================================
@@ -2633,15 +2839,37 @@ function clearFamilyCutsceneSubtitle() {
   familyCutsceneSubtitleEl.textContent = '';
 }
 
+// Efter PIRATES BREAK OFF: foerste gang spilles family-cutscenen (og starter
+// playlisten); ALLE senere gange springes den helt over — vi gaar direkte i shoppen
+// mens playlisten loeber uforstyrret videre. (Cutscenen skal ikke gentages.)
+function proceedAfterAmbush() {
+  if (familyCutscenePlayed) {
+    // Allerede spillet i denne gennemspilning -> spring over, gaa direkte i shoppen.
+    // Playlisten koerer allerede (startet da cutscenen spillede), saa intet musik-skift.
+    ambushWinEl.classList.remove('visible');
+    ambushWon = false;
+    ambushInputReady = false;
+    openShop();
+  } else {
+    startFamilyCutscene();
+  }
+}
+
 function startFamilyCutscene() {
+  // Markér med det samme at scenen er spillet i denne gennemspilning — saa den
+  // aldrig gentages mellem de senere stop (proceedAfterAmbush springer den over).
+  familyCutscenePlayed = true;
   // Forlad ambush-win-state: vi har vist retreat-noten, nu giver vi pilot-rummet.
   ambushWinEl.classList.remove('visible');
   ambushWon = false;
   ambushInputReady = false;
 
   // Stop gameMusic (har ligget og spillet siden kampen). Travel-musikken
-  // fader blødt ind i stedet — undgaar at to spor overlapper.
+  // fader blødt ind i stedet — undgaar at to spor overlapper. Dette er ogsaa
+  // hvor baggrunds-playlisten aktiveres: Travel er spor 0, og naar den slutter
+  // skifter 'ended' til kampsporet og frem og tilbage derfra.
   stopGameMusic();
+  enterPlaylistAtTravel();
 
   familyCutsceneVisible = true;
   familyCutsceneEl.classList.add('visible');
@@ -2654,7 +2882,7 @@ function startFamilyCutscene() {
     familyCutsceneVideo.volume = CUTSCENE_VIDEO_VOLUME;
     const pv = familyCutsceneVideo.play();
     if (pv) pv.catch(() => {});
-    fadeInTravelMusic(0.55, 1500);
+    fadeInTravelMusic(PLAYLIST_VOL, 1500);   // spor 0 i playlisten — fader blødt ind
   }, 1500);
 
   // Skip-knap: kun spilleren der har set scenen foer faar tilbuddet om at
@@ -2705,7 +2933,9 @@ familyCutsceneVideo.addEventListener('timeupdate', () => {
 function startGameFromTitle() {
   titleVisible = false;
   titleEl.classList.remove('visible');
-  // Ny gennemspilning: start forfra i Content (sorgen kommer foerst efter cutscenen).
+  // Ny gennemspilning: family-cutscenen er igen i spil (spilles én gang naar foerste
+  // baghold er vundet), og humøret starter forfra i Content (sorgen kommer foerst efter).
+  familyCutscenePlayed = false;
   brianStartMood = BRIAN_DEFAULT;
   setBrianMood(BRIAN_DEFAULT);
   stopTitleMusic();
@@ -2775,9 +3005,12 @@ function update(now) {
     stopLaserHum(); stopLaserWeld();   // laseren tier naar skibet dør
     player.dyingT += dt;
     // Fade gameplay-musikken lineaert ud over dying-fasen (saa den ikke brat
-    // stopper naar den endelige eksplosion fyrer).
-    const fadeProgress = Math.min(1, player.dyingT / 1500);
-    gameMusicEl.volume = 0.55 * (1 - fadeProgress);
+    // stopper naar den endelige eksplosion fyrer). I playlist-mode roerer vi IKKE
+    // ved volumen — playlisten loeber uforstyrret videre gennem doed + restart.
+    if (!playlistMode) {
+      const fadeProgress = Math.min(1, player.dyingT / 1500);
+      gameMusicEl.volume = 0.55 * (1 - fadeProgress);
+    }
     // Inerti i rummet: skibet driver videre med sin nuvaerende fart under dying.
     player.x += player.vx * dtSec;
     player.y += player.vy * dtSec;
@@ -2795,9 +3028,13 @@ function update(now) {
       sfxBigExplosion({ volume: 1.5 });
       // Tag-en CSS-klasse paa for at fade Game Over-overlayet ind (0.5s delay + 1s).
       gameOverEl.classList.add('visible');
-      // Skift fra gameplay-musik tilbage til titelmusik.
-      stopGameMusic();
-      playTitleMusic();
+      // Foer playlist-mode: skift fra gameplay-musik tilbage til titelmusik paa
+      // Game Over. I playlist-mode lader vi playlisten loebe videre, saa musikken
+      // er ubrudt naar spilleren trykker restart.
+      if (!playlistMode) {
+        stopGameMusic();
+        playTitleMusic();
+      }
       // Stop thrust-lyden hvis den koerte
       stopThrust();
     }
@@ -3104,19 +3341,22 @@ function update(now) {
   // tutorial-fasen ikke skal vaere lige saa svaer som "rigtig" kamp efter shoppen.
   // Ambush-win: ingen nye pirater spawner — dem der er paa skaermen flygter.
   if (gameTime > nextEnemyTime && !ambushWon) {
-    const cap = hasGraduated ? 6 : 4;
+    // Post-graduation: parametre kommer fra det aktuelle rejse-stop (skalerer pr.
+    // leg — flere/haardere boelger jo taettere paa hjem). Tutorial er uaendret.
+    const leg = currentLeg();
+    const cap = hasGraduated ? leg.cap : 4;
     const minRoom = hasGraduated ? 3 : 2;
     const room = cap - enemies.length;
     if (room >= minRoom) {
-      // Simulation: 2-3 ad gangen. Post-shop: 3-6.
+      // Simulation: 2-3 ad gangen. Post-shop: leg-skaleret (stop 1: 3-6 ... stigende).
       const waveSize = hasGraduated
-        ? 3 + Math.floor(Math.random() * 4)   // 3, 4, 5 eller 6
+        ? leg.waveMin + Math.floor(Math.random() * leg.waveSpan)
         : 2 + Math.floor(Math.random() * 2);  // 2 eller 3
       const count = Math.min(waveSize, room);
       for (let k = 0; k < count; k++) spawnEnemy();
-      // Simulation: 12-18s mellem boelger. Post-shop: 10-16s.
+      // Simulation: 12-18s mellem boelger. Post-shop: leg-skaleret (kortere gaps senere).
       nextEnemyTime = hasGraduated
-        ? gameTime + 10000 + Math.random() * 6000
+        ? gameTime + leg.gapMin + Math.random() * leg.gapSpan
         : gameTime + 12000 + Math.random() * 6000;
     } else {
       nextEnemyTime = gameTime + 2500;   // for fyldt — vent kort
@@ -3273,11 +3513,11 @@ function update(now) {
           e.dyingT = 0;
           // Brian: kill taeller mod humør én op — det kraever 3 kills for ét trin.
           brianOnKill();
-          // Ambush-mission: taeller kills og udloeser pirate retreat ved 10.
+          // Ambush-mission: taeller kills og rydder stoppet ved leg'ets kill-maal.
           // Kun post-graduation — simulationen har ingen win-condition for kills.
           if (hasGraduated && !ambushWon) {
             pirateKills++;
-            if (pirateKills >= 10) triggerAmbushWin();
+            if (pirateKills >= currentLeg().killTarget) triggerLegWin();
           }
           for (let k = 0; k < 3; k++) {
             const ang = Math.random() * Math.PI * 2;
@@ -3442,7 +3682,7 @@ function laserKill(e) {
   brianOnKill();
   if (hasGraduated && !ambushWon) {
     pirateKills++;
-    if (pirateKills >= 10) triggerAmbushWin();
+    if (pirateKills >= currentLeg().killTarget) triggerLegWin();
   }
   const A = 12, B = 11;
   for (let k = 0; k < 3; k++) {
