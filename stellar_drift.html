@@ -705,6 +705,13 @@
     letter-spacing: 1.5px;
     color: rgba(220, 235, 255, 0.92);
   }
+  /* Lille funktions-note paa et item (fx "+20% thrust") — dæmpet, ved siden af navnet. */
+  #shop .item-note {
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: rgba(150, 200, 160, 0.8);
+    margin-left: 8px;
+  }
   #shop .item-cost {
     display: inline-flex;
     align-items: center;
@@ -966,6 +973,15 @@
       <div class="item" data-item="weapon-rl" data-cost="600" data-slot="weapon">
         <span class="item-name">Rocket Launcher</span>
         <span class="item-cost">600 <span class="coin-pip"></span></span>
+      </div>
+    </div>
+    <!-- Funktionelle skib-opgraderinger (slot 'upgrade'): ejes vedvarende, ingen
+         cockpit-grafik, paavirker direkte gameplay. Valgfri til LAUNCH. -->
+    <div class="category">
+      <div class="category-title">UPGRADES</div>
+      <div class="item" data-item="up-boost" data-cost="50" data-slot="upgrade">
+        <span class="item-name">Rocket Motor Boost <span class="item-note">+20% thrust</span></span>
+        <span class="item-cost">50 <span class="coin-pip"></span></span>
       </div>
     </div>
     <!-- Nye kategorier (phase 2+): kosmetiske/komfort-opgraderinger til rummet.
@@ -1274,11 +1290,11 @@ const HOME_LEGS = [
     story: "Fresh license in your pocket and the keys to your <strong>first vessel</strong>, you set course for home.<br><br>"
          + "But the trade lanes aren't what they used to be. Halfway through the asteroid corridor your comms light up — scrap-rigged engines, pirate signatures closing fast. No life signs aboard — just unmanned drone hulls the cartels set loose to pick off graduates like you.<br><br>"
          + "There's no turning back, <strong>Brian</strong>. Fight your way home." },
-  { name: 'NEBULA VEIL', killTarget: 8, cap: 7, waveMin: 4, waveSpan: 3, gapMin: 9000, gapSpan: 5000,
+  { name: 'NEBULA VEIL', killTarget: 5, cap: 7, waveMin: 4, waveSpan: 3, gapMin: 9000, gapSpan: 5000,
     story: "The corridor falls behind you, but home is still a long way off.<br><br>"
          + "You slip into the <strong>Nebula Veil</strong> — sensors half-blind in the glowing murk, the hull groaning against the drift. They were waiting in it. More hulls this time, heavier, and they don't scatter as easily.<br><br>"
          + "Hold the line, <strong>Brian</strong>. You're closer than you were." },
-  { name: 'HOME APPROACH', killTarget: 12, cap: 8, waveMin: 4, waveSpan: 4, gapMin: 8000, gapSpan: 5000,
+  { name: 'HOME APPROACH', killTarget: 10, cap: 8, waveMin: 4, waveSpan: 4, gapMin: 8000, gapSpan: 5000,
     story: "There — through the haze, the pale light of <strong>home</strong>. Close enough to feel the dock lamps.<br><br>"
          + "But the cartels know exactly where graduates run to. The whole pack has come to meet you at the doorstep — every hull they had left, thrown into one last gauntlet.<br><br>"
          + "One more time, <strong>Brian</strong>. Bring it home." }
@@ -1306,8 +1322,12 @@ let coins = 1050 - 800;
 // ship: enkelt-slot (ét skib ad gangen). De øvrige er multi-slots (lister) — man
 // kan eje flere vaaben/tilbehoer/rengoeringer samtidig. SLOT_LISTS mapper et items
 // data-slot til den liste det havner i, saa buyItem kan haandtere dem generisk.
-let owned = { ship: STARTER_SHIP, weapons: [], accessories: [], cleaning: [] };
-const SLOT_LISTS = { weapon: 'weapons', accessory: 'accessories', cleaning: 'cleaning' };
+let owned = { ship: STARTER_SHIP, weapons: [], accessories: [], cleaning: [], upgrades: [] };
+const SLOT_LISTS = { weapon: 'weapons', accessory: 'accessories', cleaning: 'cleaning', upgrade: 'upgrades' };
+// Funktionelle skib-opgraderinger (slot 'upgrade'): ejes vedvarende, paavirker
+// gameplay direkte. Rocket Motor Boost giver +20% thrust (ganges paa accel).
+const BOOST_UPGRADE_ID = 'up-boost';
+const BOOST_MULT = 1.20;
 
 function playTrack(el) {
   el.currentTime = 0;
@@ -2718,7 +2738,7 @@ function triggerVictory() {
 // kører videre saa fjenderne kan thrust off-screen og raketterne kan dø ud;
 // alle kollisioner er slaaet fra fra og med dette tidspunkt.
 // Dusør pr. draebt pirat — udbetales naar kampen er ovre. 12 coins/kill, saa
-// foerste stop (5 kills) giver 60 coins, senere stop mere (kill-maal 5/8/12).
+// foerste stop (5 kills) giver 60 coins, senere stop mere (kill-maal 5/5/12).
 // Laegges i den vedvarende pung (coins nulstilles ikke laengere ved shop-besoeg),
 // saa belønningen overlever ind i shoppen.
 const BOUNTY_PER_KILL = 12;
@@ -3101,7 +3121,9 @@ function update(now) {
   // MAX_SPEED-cap'en aendres ikke af mood — humøret aendrer hvor hurtigt man
   // accelerere, ikke topfart. Det holder kapitalskib-feel uden bizarre flyverier.
   const shipAccel = (SHIP_TYPES[equippedShip] || SHIP_TYPES['default']).accel || 1;
-  const THRUST = 60 * moodFx().thrust * shipAccel;   // mood- og skib-skaleret accel
+  // Rocket Motor Boost (shop-opgradering): +20% thrust naar den ejes.
+  const boostMult = owned.upgrades.includes(BOOST_UPGRADE_ID) ? BOOST_MULT : 1;
+  const THRUST = 60 * moodFx().thrust * shipAccel * boostMult;   // mood-, skib- og boost-skaleret accel
   const accelAngle = player.thrusterAngle + Math.PI;
   const ax = Math.cos(accelAngle) * THRUST * player.throttle;
   const ay = Math.sin(accelAngle) * THRUST * player.throttle;
