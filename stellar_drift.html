@@ -45,6 +45,12 @@
   }
   #hud .label { color: rgba(150, 180, 220, 0.5); font-size: 10px; letter-spacing: 2px; }
   #hud .value { color: #fff; font-size: 18px; font-weight: 300; }
+  /* Vaaben-label: viser hvad spilleren har i haanden (skifter ved pickup). Kun
+     synlig i rejse-kampene (sat via .visible), ikke i tutorial-simulationen. */
+  #hud .weapon-block { margin-top: 14px; display: none; }
+  #hud .weapon-block.visible { display: block; }
+  #hud .weapon-name { color: #ffe27a; font-size: 15px; font-weight: 400; letter-spacing: 2px; }
+  #hud .weapon-name.boosted { color: #8fe3a0; }   /* opsamlet vaaben (ikke dit eget) */
   #hud .hull-block { margin-top: 14px; }
   #hud .hull-row {
     display: flex;
@@ -859,6 +865,10 @@
       <span class="hull-pct" id="hullPct">100%</span>
     </div>
   </div>
+  <div class="weapon-block" id="weaponBlock">
+    <div class="label">WEAPON</div>
+    <div class="weapon-name" id="weaponName">ROCKETS</div>
+  </div>
   <div class="heat-block" id="heatBlock">
     <div class="label">HEAT</div>
     <div class="heat-row">
@@ -1121,6 +1131,8 @@ const hullPctEl = document.getElementById('hullPct');
 const heatBlockEl = document.getElementById('heatBlock');
 const heatFillEl = document.getElementById('heatFill');
 const heatPctEl = document.getElementById('heatPct');
+const weaponBlockEl = document.getElementById('weaponBlock');
+const weaponNameEl = document.getElementById('weaponName');
 const portraitImgEl = document.getElementById('portraitImg');
 const portraitMoodEl = document.getElementById('portraitMood');
 
@@ -1797,6 +1809,56 @@ function sfxRevolver({ volume = 1 } = {}) {
   osc.start(t0); osc.stop(t0 + 0.22);
 }
 
+// --- Pickup: mønt opsamlet — lille, lyst to-tone "ding". ---
+function sfxCoinPickup({ volume = 1 } = {}) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  const tones = [880, 1320];   // hurtig stigende kvint, "coin"-klang
+  tones.forEach((f, i) => {
+    const t = t0 + i * 0.06;
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(f, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.18 * volume, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
+    osc.connect(g); g.connect(getSfxGain());
+    osc.start(t); osc.stop(t + 0.12);
+  });
+}
+
+// --- Pickup: vaaben opsamlet — opadgaaende power-up-sweep med lidt glimt. ---
+function sfxWeaponPickup({ volume = 1 } = {}) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(280, t0);
+  osc.frequency.exponentialRampToValueAtTime(900, t0 + 0.22);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 0.7;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(0.26 * volume, t0 + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.30);
+  osc.connect(lp); lp.connect(g); g.connect(getSfxGain());
+  osc.start(t0); osc.stop(t0 + 0.32);
+  // Glimt-overtone (sine, hoejt) for "power"-fornemmelse
+  const spark = ctx.createOscillator();
+  spark.type = 'sine';
+  spark.frequency.setValueAtTime(1400, t0 + 0.05);
+  spark.frequency.exponentialRampToValueAtTime(2600, t0 + 0.26);
+  const sg = ctx.createGain();
+  sg.gain.setValueAtTime(0, t0 + 0.05);
+  sg.gain.linearRampToValueAtTime(0.10 * volume, t0 + 0.09);
+  sg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.30);
+  spark.connect(sg); sg.connect(getSfxGain());
+  spark.start(t0 + 0.05); spark.stop(t0 + 0.32);
+}
+
 // --- 14. Weak Laser: VEDVARENDE lyde, ikke engangs. ---
 // (a) Lyssværd-hum (staaende, ingen swoosh): to detunede oscillatorer + blød
 //     tremolo/vibrato-waver gennem et lowpass. Starter/stopper med strålen.
@@ -2363,6 +2425,153 @@ function easeAngle(cur, target, rate) {
 const particles = [];   // impact debris, motorgloed, splinter
 const debris = [];      // faste skibsstykker efter destruktion
 
+// ===== PICKUPS (rejse-kampene, post-graduation) ====================================
+// Hver draebt fjende dropper en moent (samles op = coins). Nogle gange dropper den
+// ogsaa et vaaben, som — naar det samles op — udstyres resten af kampen (til doed,
+// stop ryddet, eller et nyt vaaben samles op). Drops gaelder KUN post-graduation;
+// tutorial-simulationen har ingen loot. Erstatter den faste end-of-fight bounty.
+const pickups = [];
+const COIN_PICKUP_VALUE = 10;          // coins pr. moent (brugeren: "de 10 coins")
+const WEAPON_DROP_CHANCE = 0.18;       // ~18% af kills dropper ogsaa et vaaben
+const PICKUP_MAGNET_RADIUS = 130;      // px: indenfor denne afstand trækkes pickup mod skibet
+const PICKUP_COIN_LIFE = 12000;        // ms foer en moent forsvinder (blinker mod slut)
+const PICKUP_WEAPON_LIFE = 16000;      // ms — vaaben lever laengere (mere vaerdifuldt)
+const DROP_WEAPONS = ['weapon-mg', 'weapon-laser', 'weapon-rl', 'weapon-rusty'];
+let coinsThisMission = 0;              // samlet i nuvaerende kamp — vises paa win-skaermen
+
+// Vaabnenes visningsnavn i HUD'en.
+const WEAPON_NAMES = {
+  'default':      'ROCKETS',
+  'weapon-rl':    'ROCKETS',
+  'weapon-rusty': 'RUSTY SPACEGUN',
+  'weapon-laser': 'LASER',
+  'weapon-mg':    'MACHINE GUN'
+};
+// Farve + kort label paa vaaben-pickups (badge i verden).
+const WEAPON_COLORS = { 'weapon-mg': '#ff6e6e', 'weapon-laser': '#5fe0ff', 'weapon-rl': '#ffb060', 'weapon-rusty': '#caa56a' };
+const WEAPON_SHORT  = { 'weapon-mg': 'MG', 'weapon-laser': 'LAS', 'weapon-rl': 'RKT', 'weapon-rusty': 'RST' };
+// Skift aktivt vaaben + nulstil vaaben-tilstand (magasin/heat/laser) og opdater HUD.
+// `pickedUp` = true naar det kommer fra et drop (ikke spillerens eget) -> groen label.
+function setEquippedWeapon(w, pickedUp) {
+  equippedWeapon = w;
+  player.magazine = 5;
+  player.heat = 0;
+  player.overheated = false;
+  if (typeof mgStuckFire !== 'undefined') mgStuckFire = false;
+  player.fireCooldown = 0;
+  heatBlockEl.classList.toggle('visible', w === 'weapon-mg' && weaponHudActive);
+  updateWeaponHUD(pickedUp);
+}
+let weaponHudActive = false;   // vaaben-HUD vises kun i rejse-kampene
+function updateWeaponHUD(pickedUp) {
+  weaponNameEl.textContent = WEAPON_NAMES[equippedWeapon] || equippedWeapon;
+  weaponNameEl.classList.toggle('boosted', !!pickedUp);
+}
+
+// Drop loot fra en draebt fjende (kun post-graduation). Moent altid; vaaben nogle gange.
+function spawnDrops(x, y, vx, vy) {
+  if (!hasGraduated) return;
+  spawnPickup(x, y, vx, vy, 'coin', null);
+  if (Math.random() < WEAPON_DROP_CHANCE) {
+    const pool = DROP_WEAPONS.filter(w => w !== equippedWeapon);
+    const w = pool[Math.floor(Math.random() * pool.length)];
+    if (w) spawnPickup(x, y, vx, vy, 'weapon', w);
+  }
+}
+function spawnPickup(x, y, vx, vy, kind, weapon) {
+  const ang = Math.random() * Math.PI * 2;
+  const kick = 40 + Math.random() * 55;   // "kastes ud" af eksplosionen, driver saa til ro
+  pickups.push({
+    x, y,
+    vx: vx * 0.25 + Math.cos(ang) * kick,
+    vy: vy * 0.25 + Math.sin(ang) * kick,
+    kind, weapon,
+    radius: kind === 'coin' ? 9 : 13,
+    life:    kind === 'coin' ? PICKUP_COIN_LIFE : PICKUP_WEAPON_LIFE,
+    spin: Math.random() * Math.PI * 2
+  });
+}
+
+// Opdater alle pickups: magnet mod skibet naar tæt paa, mild drift-daempning,
+// wrap som andre entiteter, og opsamling ved overlap med skibet.
+function updatePickups(dtSec, dt) {
+  const collectable = player.alive && !player.dying && !ambushWon;
+  const mag = PICKUP_MAGNET_RADIUS;
+  for (let i = pickups.length - 1; i >= 0; i--) {
+    const p = pickups[i];
+    p.life -= dt;
+    if (p.life <= 0) { pickups.splice(i, 1); continue; }
+    const dx = player.x - p.x, dy = player.y - p.y;
+    const dist2 = dx*dx + dy*dy;
+    if (collectable && dist2 < mag * mag) {
+      const dist = Math.sqrt(dist2) || 1;
+      const pull = 340 * (1 - dist / mag);   // staerkere jo taettere paa
+      p.vx += (dx / dist) * pull * dtSec;
+      p.vy += (dy / dist) * pull * dtSec;
+    }
+    p.vx *= 0.985; p.vy *= 0.985;
+    p.x += p.vx * dtSec;
+    p.y += p.vy * dtSec;
+    p.spin += dtSec * 3;
+    if (p.x < -20) p.x = canvas.width + 20;
+    if (p.x > canvas.width + 20) p.x = -20;
+    if (p.y < -20) p.y = canvas.height + 20;
+    if (p.y > canvas.height + 20) p.y = -20;
+    if (collectable) {
+      const rr = player.radius * WORLD_SCALE + p.radius + 8;   // gavmild opsamlings-radius
+      if (dist2 < rr * rr) {
+        collectPickup(p);
+        pickups.splice(i, 1);
+      }
+    }
+  }
+}
+function collectPickup(p) {
+  if (p.kind === 'coin') {
+    coins += COIN_PICKUP_VALUE;
+    coinsThisMission += COIN_PICKUP_VALUE;
+    sfxCoinPickup();
+  } else {
+    setEquippedWeapon(p.weapon, true);
+    sfxWeaponPickup();
+  }
+}
+
+// Tegn pickups: moenter (gyldne, "roterende") + vaaben-badges (farvet kapsel + label).
+function drawPickups() {
+  for (const p of pickups) {
+    // Blink de sidste ~2.2s foer despawn som advarsel.
+    if (p.life < 2200 && Math.floor(p.life / 130) % 2 === 0) continue;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    if (p.kind === 'coin') {
+      ctx.beginPath(); ctx.arc(0, 0, p.radius + 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(230, 183, 64, 0.18)'; ctx.fill();
+      const wob = 0.4 + 0.6 * Math.abs(Math.cos(p.spin));   // bredde-puls = "mønten roterer"
+      ctx.scale(wob, 1);
+      ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+      const g = ctx.createRadialGradient(-p.radius * 0.3, -p.radius * 0.3, 1, 0, 0, p.radius);
+      g.addColorStop(0, '#fff2a8'); g.addColorStop(0.55, '#e6b740'); g.addColorStop(1, '#7a5410');
+      ctx.fillStyle = g; ctx.fill();
+      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(60,40,5,0.5)'; ctx.stroke();
+    } else {
+      const col = WEAPON_COLORS[p.weapon] || '#9fd0ff';
+      const label = WEAPON_SHORT[p.weapon] || '?';
+      ctx.translate(0, Math.sin(p.spin) * 2);   // blid bob
+      ctx.beginPath(); ctx.arc(0, 0, p.radius + 5, 0, Math.PI * 2);
+      ctx.fillStyle = col + '33'; ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(8, 14, 22, 0.9)'; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = col; ctx.stroke();
+      ctx.fillStyle = col;
+      ctx.font = '700 10px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, 0, 0.5);
+    }
+    ctx.restore();
+  }
+}
+
 function spawnPlayer() {
   // Anvend ship-config baseret paa hvad spilleren har udstyret.
   const cfg = SHIP_TYPES[equippedShip] || SHIP_TYPES['default'];
@@ -2385,8 +2594,13 @@ function spawnPlayer() {
   player.hasInput = false;   // saa thrust-sfx-transitionen genstartes korrekt
   player.heat = 0;
   player.overheated = false;
-  // Heat-blokken vises kun naar MG er udstyret.
-  heatBlockEl.classList.toggle('visible', equippedWeapon === 'weapon-mg');
+  // Vaaben-HUD'en vises kun i rejse-kampene (ikke i tutorial-simulationen), saa
+  // spilleren kan se hvad de har — vigtigt naar pickups skifter vaabnet midt i kamp.
+  weaponHudActive = hasGraduated;
+  weaponBlockEl.classList.toggle('visible', weaponHudActive);
+  updateWeaponHUD(false);   // missionen starter med spillerens eget (launchede) vaaben
+  // Heat-blokken vises kun naar MG er udstyret (og kun i rejse-kampene).
+  heatBlockEl.classList.toggle('visible', equippedWeapon === 'weapon-mg' && weaponHudActive);
   updateHullHUD();
   updateHeatHUD();
   // Brian starter i brianStartMood ved nyt liv (Content foer cutscenen, Grief efter). Fremdrift nulstilles.
@@ -2408,6 +2622,8 @@ function restartGame() {
   enemyBullets.length = 0;
   particles.length = 0;
   debris.length = 0;
+  pickups.length = 0;
+  coinsThisMission = 0;   // nyt stop -> ny opsamlings-taeller
   score = 0;
   scoreEl.textContent = 0;
   gameTime = 0;
@@ -2734,14 +2950,10 @@ function triggerVictory() {
   stopThrust();
 }
 
-// 10 pirat-kills i ambush-missionen — pirater bryder af og flygter. Spillet
-// kører videre saa fjenderne kan thrust off-screen og raketterne kan dø ud;
-// alle kollisioner er slaaet fra fra og med dette tidspunkt.
-// Dusør pr. draebt pirat — udbetales naar kampen er ovre. 12 coins/kill, saa
-// foerste stop (5 kills) giver 60 coins, senere stop mere (kill-maal 5/5/12).
-// Laegges i den vedvarende pung (coins nulstilles ikke laengere ved shop-besoeg),
-// saa belønningen overlever ind i shoppen.
-const BOUNTY_PER_KILL = 12;
+// Et stop ryddes ved leg'ets kill-maal. Spillet kører videre saa fjenderne kan
+// thrust off-screen og raketterne kan dø ud; alle kollisioner er slaaet fra fra og
+// med dette tidspunkt. Coins tjenes nu som opsamlede moent-pickups undervejs (ikke
+// en fast bounty), saa belønningen afhaenger af hvor meget spilleren naar at samle.
 
 // Et stop er ryddet: sidste stop -> HOME-ending (cliffhanger); ellers normal
 // PIRATES-BREAK-OFF -> family-cutscene -> shop, og rejsen rykker ét stop frem.
@@ -2756,9 +2968,9 @@ function triggerAmbushWin() {
   // Rejsen rykker ét stop frem — naeste LAUNCH spiller det haardere stop, og
   // AMBUSH-cutscenen viser dets sektor-tekst. (Sidste stop gaar aldrig hertil.)
   legIndex = Math.min(legIndex + 1, HOME_LEGS.length - 1);
-  const bounty = BOUNTY_PER_KILL * pirateKills;
-  coins += bounty;
-  ambushBountyEl.innerHTML = 'BOUNTY COLLECTED &nbsp; +' + bounty + ' <span class="coin-pip"></span>';
+  // Mønterne blev lagt i pungen efterhaanden som de blev samlet op i kampen — her
+  // viser vi bare totalen for dette stop. (Ikke-opsamlede moenter taeller ikke.)
+  ambushBountyEl.innerHTML = 'COLLECTED &nbsp; +' + coinsThisMission + ' <span class="coin-pip"></span>';
   // Lejet maskingevær var kun til denne ene kamp — det udløber nu. Skib + købte
   // (ikke-lejede) våben som Rocket Launcher bevares. Vi fjerner det fra ejerlisten
   // saa shoppen bagefter viser spilleren som våbenløs, og giver en kort besked.
@@ -2790,7 +3002,7 @@ function triggerHomeEnding() {
   ambushWon = true;          // genbrug "kampen er ovre"-tilstanden (retreat + ingen kollision)
   homeEndingVisible = true;
   ambushInputReady = false;
-  coins += BOUNTY_PER_KILL * pirateKills;
+  // Moenterne er allerede samlet op i kampen og lagt i pungen — ingen ekstra bounty her.
   for (const b of enemyBullets) {
     if (b.life > 900) b.life = 900;
     b.burnerOn = false;
@@ -3348,6 +3560,9 @@ function update(now) {
     if (p.life <= 0) particles.splice(i, 1);
   }
 
+  // --- Update pickups (moenter + vaaben-drops) ---
+  updatePickups(dtSec, dt);
+
   // --- Update debris (faste skibsstykker, roterer mens de driver) ---
   for (let i = debris.length - 1; i >= 0; i--) {
     const d = debris[i];
@@ -3397,6 +3612,7 @@ function update(now) {
         spawnBigExplosion(e.x, e.y, e.vx, e.vy);
         spawnEnemyDebris(e.x, e.y, e.vx, e.vy, e.aimAngle);
         sfxBigExplosion();
+        spawnDrops(e.x, e.y, e.vx, e.vy);   // moent (+ evt. vaaben) til opsamling
         score += 100;
         scoreEl.textContent = score;
         enemies.splice(i, 1);
@@ -4055,6 +4271,9 @@ function render() {
 
   // Draw twinkling foreground stars
   drawStars();
+
+  // Pickups (moenter + vaaben-drops) — under skib/projektiler saa de ligger "paa gulvet"
+  drawPickups();
 
   // Player bullets - thin glowing lines
   drawPlayerBullets();
