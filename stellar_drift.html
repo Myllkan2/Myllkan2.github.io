@@ -1233,9 +1233,10 @@ const laserBeam = { active: false, x1: 0, y1: 0, x2: 0, y2: 0, hit: false };
 
 // Aim-vinkel for et skud — taarnet peger paa musen, men ramte vinkel kan have
 // fejlmargin (Angry/Afraid + Old Rusty Spacegun). Tilfaeldigt ±err grader pr. skud.
-function firingAngle() {
-  let errDeg = moodFx().aimError;
-  if (equippedWeapon === 'weapon-rusty') errDeg += RUSTY_SPREAD_DEG;   // skæv pibe, stacker med humør
+function firingAngle(extraSpreadDeg = 0) {
+  // extraSpreadDeg: vaaben-specifik spredning (fx Old Rusty Spaceguns skæve pibe).
+  // Passes pr. vaaben nu hvor flere vaaben kan fyre sideloebende.
+  let errDeg = moodFx().aimError + extraSpreadDeg;
   if (errDeg === 0) return player.turretAngle;
   const errRad = errDeg * Math.PI / 180;
   return player.turretAngle + (Math.random() * 2 - 1) * errRad;
@@ -2449,23 +2450,47 @@ const WEAPON_NAMES = {
 };
 // Farve + kort label paa vaaben-pickups (badge i verden).
 const WEAPON_COLORS = { 'weapon-mg': '#ff6e6e', 'weapon-laser': '#5fe0ff', 'weapon-rl': '#ffb060', 'weapon-rusty': '#caa56a' };
-const WEAPON_SHORT  = { 'weapon-mg': 'MG', 'weapon-laser': 'LAS', 'weapon-rl': 'RKT', 'weapon-rusty': 'RST' };
-// Skift aktivt vaaben + nulstil vaaben-tilstand (magasin/heat/laser) og opdater HUD.
-// `pickedUp` = true naar det kommer fra et drop (ikke spillerens eget) -> groen label.
-function setEquippedWeapon(w, pickedUp) {
-  equippedWeapon = w;
-  player.magazine = 5;
+const WEAPON_SHORT  = { 'default': 'RKT', 'weapon-mg': 'MG', 'weapon-laser': 'LAS', 'weapon-rl': 'RKT', 'weapon-rusty': 'RST' };
+
+// ===== AKTIVE VAABEN (akkumuleres via pickups) =====================================
+// Vaaben STABLES: base-vaabnet man launchede med + alle opsamlede vaaben fyrer
+// SIDELOEBENDE. Hvert vaaben har sin egen timing (cooldown/magasin) i weaponTiming,
+// saa de ikke deler reload — fx kan MG og rusty skyde samtidig. MG'ets heat er unik
+// (kun ét MG muligt) og bor stadig paa player.heat/overheated. Laseren er én stråle
+// uanset. `equippedWeapon` er nu blot BASE-vaabnet (sat ved LAUNCH).
+let activeWeapons = [];          // raekkefoelge: base foerst, derefter opsamlede
+let weaponTiming = {};           // id -> { cooldown, magazine }
+let weaponHudActive = false;     // vaaben-HUD vises kun i rejse-kampene
+function freshTiming() { return { cooldown: 0, magazine: 5 }; }
+
+// Nyt mission-start: nulstil til kun base-vaabnet.
+function startMissionWeapons() {
+  activeWeapons = [equippedWeapon];
+  weaponTiming = {};
+  weaponTiming[equippedWeapon] = freshTiming();
   player.heat = 0;
   player.overheated = false;
-  if (typeof mgStuckFire !== 'undefined') mgStuckFire = false;
-  player.fireCooldown = 0;
-  heatBlockEl.classList.toggle('visible', w === 'weapon-mg' && weaponHudActive);
-  updateWeaponHUD(pickedUp);
+  mgStuckFire = false;
+  refreshWeaponHUD();
 }
-let weaponHudActive = false;   // vaaben-HUD vises kun i rejse-kampene
-function updateWeaponHUD(pickedUp) {
-  weaponNameEl.textContent = WEAPON_NAMES[equippedWeapon] || equippedWeapon;
-  weaponNameEl.classList.toggle('boosted', !!pickedUp);
+// Opsamlet vaaben lægges OVENI (fyrer sideloebende). Ingen dubletter.
+function addActiveWeapon(id) {
+  if (activeWeapons.includes(id)) return;
+  activeWeapons.push(id);
+  weaponTiming[id] = freshTiming();
+  if (id === 'weapon-mg') { player.heat = 0; player.overheated = false; }
+  refreshWeaponHUD();
+}
+// HUD: ét vaaben -> fuldt navn; flere -> korte labels med " + ". Groen naar man
+// har samlet ekstra op (mere end base-vaabnet).
+function refreshWeaponHUD() {
+  weaponBlockEl.classList.toggle('visible', weaponHudActive);
+  heatBlockEl.classList.toggle('visible', weaponHudActive && activeWeapons.includes('weapon-mg'));
+  if (!activeWeapons.length) { weaponNameEl.textContent = ''; return; }
+  weaponNameEl.textContent = activeWeapons.length === 1
+    ? (WEAPON_NAMES[activeWeapons[0]] || activeWeapons[0])
+    : activeWeapons.map(w => WEAPON_SHORT[w] || w).join(' + ');
+  weaponNameEl.classList.toggle('boosted', activeWeapons.length > 1);
 }
 
 // Drop loot fra en draebt fjende (kun post-graduation). Moent altid; vaaben nogle gange.
@@ -2473,7 +2498,8 @@ function spawnDrops(x, y, vx, vy) {
   if (!hasGraduated) return;
   spawnPickup(x, y, vx, vy, 'coin', null);
   if (Math.random() < WEAPON_DROP_CHANCE) {
-    const pool = DROP_WEAPONS.filter(w => w !== equippedWeapon);
+    // Drop kun vaaben spilleren ikke allerede har aktivt (ingen nytteloese dubletter).
+    const pool = DROP_WEAPONS.filter(w => !activeWeapons.includes(w));
     const w = pool[Math.floor(Math.random() * pool.length)];
     if (w) spawnPickup(x, y, vx, vy, 'weapon', w);
   }
@@ -2532,7 +2558,7 @@ function collectPickup(p) {
     coinsThisMission += COIN_PICKUP_VALUE;
     sfxCoinPickup();
   } else {
-    setEquippedWeapon(p.weapon, true);
+    addActiveWeapon(p.weapon);   // stables ovenpaa — fyrer sideloebende
     sfxWeaponPickup();
   }
 }
@@ -2594,13 +2620,10 @@ function spawnPlayer() {
   player.hasInput = false;   // saa thrust-sfx-transitionen genstartes korrekt
   player.heat = 0;
   player.overheated = false;
-  // Vaaben-HUD'en vises kun i rejse-kampene (ikke i tutorial-simulationen), saa
-  // spilleren kan se hvad de har — vigtigt naar pickups skifter vaabnet midt i kamp.
+  // Vaaben-HUD'en vises kun i rejse-kampene (ikke i tutorial-simulationen). Start
+  // missionen med kun base-vaabnet aktivt — pickups stables ovenpaa undervejs.
   weaponHudActive = hasGraduated;
-  weaponBlockEl.classList.toggle('visible', weaponHudActive);
-  updateWeaponHUD(false);   // missionen starter med spillerens eget (launchede) vaaben
-  // Heat-blokken vises kun naar MG er udstyret (og kun i rejse-kampene).
-  heatBlockEl.classList.toggle('visible', equippedWeapon === 'weapon-mg' && weaponHudActive);
+  startMissionWeapons();
   updateHullHUD();
   updateHeatHUD();
   // Brian starter i brianStartMood ved nyt liv (Content foer cutscenen, Grief efter). Fremdrift nulstilles.
@@ -3362,75 +3385,63 @@ function update(now) {
   if (player.y > canvas.height + 20) player.y = -20;
 
   // --- Firing ---
-  // Raket: 5-skuds burst med 180ms imellem, derefter 900ms reload.
-  // MG: kontinuerlig fyring, ~90ms imellem skud (ca 11 rps), med overheat-bar.
-  if (player.fireCooldown > 0) player.fireCooldown -= dt;
+  // Vaaben AKKUMULERES (pickups): base + opsamlede fyrer SIDELOEBENDE, hvert med
+  // sin egen timing i weaponTiming, saa de ikke deler reload. MG: ~90ms cadence +
+  // overheat-bar. Raket/rusty: 5-skuds burst (180ms) + 900ms reload. Laser: én stråle.
   const rof = moodFx().rof;
-  // Fyrings-trigger:
-  //  • Desktop: museknap holdt nede = fyr (uaendret).
-  //  • Touch + raket: ét skud pr. tryk (kant-flag) — bevidste enkeltskud.
-  //  • Touch + maskingevaer: hold sigte-joysticken nede (+ retning) = autofire,
-  //    ligesom paa PC. MG'et har sin egen overheat-bar, saa hold-fyring passer.
-  const mgHeld = aimstick.active && aimstick.mag > 0;   // sigte-joysticken holdes nede
-  // Touch: ALLE vaaben autofyrer ved at HOLDE sigte-joysticken — som paa desktop med musen.
-  // Raket/rusty pacet af deres magasin/reload-cooldown (180/900ms); MG/laser af egen rate.
-  const trigger = touchModeOn
-    ? mgHeld
-    : mouse.down;
-  if (equippedWeapon === 'weapon-laser') {
+  // Fyrings-trigger: desktop = museknap; touch = hold sigte-joysticken.
+  const mgHeld = aimstick.active && aimstick.mag > 0;
+  const trigger = touchModeOn ? mgHeld : mouse.down;
+
+  // Laser-stråle: aktiv hvis laser er blandt vaabnene (kun én stråle uanset).
+  if (activeWeapons.includes('weapon-laser')) {
     updateLaser(trigger, dtSec);
-  } else if (equippedWeapon === 'weapon-mg') {
-    // Heat-dynamik: stiger 1/3 per sekund mens man fyrer (fuld paa 3s),
-    // falder 2/3 per sekund naar man ikke fyrer (tom paa 1.5s). Locked ved
-    // 100%, unlocked igen naar heat er nul.
-    // Angry-sticky: én tryk og maskingevaeret fyrer indtil overophedet.
+  } else if (laserBeam.active) {
+    updateLaser(false, dtSec);   // defensiv: sluk en evt. hængende stråle
+  }
+
+  // Maskingevaer: heat-baseret, egen cooldown. player.heat/overheated er MG-unik.
+  if (activeWeapons.includes('weapon-mg')) {
+    const ts = weaponTiming['weapon-mg'];
+    if (ts.cooldown > 0) ts.cooldown -= dt;
+    // Angry-sticky: ét tryk og MG'et fyrer indtil overophedet.
     if (trigger && brianMood === 'Angry') mgStuckFire = true;
     if (player.overheated) mgStuckFire = false;
     const triggerHeld = trigger || (brianMood === 'Angry' && mgStuckFire);
     const wantFire = triggerHeld && !player.overheated;
     if (wantFire) {
       player.heat += dtSec / 3;
-      if (player.heat >= 1.0) {
-        player.heat = 1.0;
-        player.overheated = true;
-        mgStuckFire = false;   // overheat braekker stuck-fyringen
-      }
+      if (player.heat >= 1.0) { player.heat = 1.0; player.overheated = true; mgStuckFire = false; }
     } else {
       player.heat -= dtSec / 1.5;
-      if (player.heat <= 0) {
-        player.heat = 0;
-        player.overheated = false;
-      }
+      if (player.heat <= 0) { player.heat = 0; player.overheated = false; }
     }
-    if (wantFire && player.fireCooldown <= 0) {
+    if (wantFire && ts.cooldown <= 0) {
       fireMGBullet(firingAngle());
       sfxMachineGun();
-      player.fireCooldown = 90 / rof;
+      ts.cooldown = 90 / rof;
     }
     updateHeatHUD();
-  } else {
-    // Magasin fyldes naar reload-cooldown'en er udlobet (kun raket).
-    if (player.magazine === 0 && player.fireCooldown <= 0) {
-      player.magazine = 5;
-    }
-    if (trigger && player.fireCooldown <= 0 && player.magazine > 0) {
-      // Angry: trigger "fastholdes" → fireMult skud pr. klik (clamped til magasin).
-      // Old Rusty Spacegun deler raket-kadencen (samme rate som Rocket Launcher),
-      // men affyrer rustne slugs i stedet for raketter.
-      const useRusty = (equippedWeapon === 'weapon-rusty');
-      const burst = Math.min(moodFx().fireMult, player.magazine);
+  }
+
+  // Magasin-vaaben (raket/default/rusty): hvert sin cooldown + magasin -> fyrer
+  // sideloebende. Old Rusty Spacegun deler kadencen, men med skæv-pibe-spredning.
+  for (const id of activeWeapons) {
+    if (id === 'weapon-laser' || id === 'weapon-mg') continue;
+    const ts = weaponTiming[id];
+    if (ts.cooldown > 0) ts.cooldown -= dt;
+    if (ts.magazine === 0 && ts.cooldown <= 0) ts.magazine = 5;   // reload faerdig
+    if (trigger && ts.cooldown <= 0 && ts.magazine > 0) {
+      const useRusty = (id === 'weapon-rusty');
+      const burst = Math.min(moodFx().fireMult, ts.magazine);   // Angry: fireMult skud
       for (let k = 0; k < burst; k++) {
-        if (useRusty) fireRustyBullet(firingAngle());
+        if (useRusty) fireRustyBullet(firingAngle(RUSTY_SPREAD_DEG));
         else          fireBullet(firingAngle());
-        player.magazine--;
+        ts.magazine--;
       }
       if (useRusty) sfxRevolver();
       else          sfxFire();
-      if (player.magazine > 0) {
-        player.fireCooldown = 180 / rof;   // kort pause inde i burst'en
-      } else {
-        player.fireCooldown = 900 / rof;   // reload efter sidste skud
-      }
+      ts.cooldown = ts.magazine > 0 ? 180 / rof : 900 / rof;
     }
   }
   // Kant-flaget forbruges hver frame: ét tryk = max ét skud, ingen autofire.
