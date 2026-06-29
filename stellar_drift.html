@@ -726,6 +726,10 @@
     color: #e6b740;
     letter-spacing: 1px;
   }
+  #shop .item-cost.free {
+    color: rgba(150, 220, 170, 0.9);   /* gratis vaaben skiller sig ud fra de gyldne priser */
+    letter-spacing: 3px;
+  }
   #shop .item.owned .item-cost {
     color: rgba(150, 220, 170, 0.85);
   }
@@ -966,9 +970,11 @@
       <div class="category-title">WEAPONS</div>
       <!-- Spillerens egne (håbløse) våben — dukker foerst op EFTER tutorialen,
            naar den lejede MG er udloebet. Vises/skjules i applyWeaponAvailability(). -->
-      <div class="item" data-item="weapon-rusty" data-cost="60" data-slot="weapon">
-        <span class="item-name">Old Rusty Spacegun</span>
-        <span class="item-cost">60 <span class="coin-pip"></span></span>
+      <!-- Gratis fallback-vaaben: sikrer at man ALDRIG staar uden raad til et vaaben
+           (LAUNCH kraever skib+vaaben). Fundet i en bunke skrot -> koster 0. -->
+      <div class="item" data-item="weapon-rusty" data-cost="0" data-slot="weapon">
+        <span class="item-name">Old Rusty Spacegun <span class="item-note">from a pile of junk</span></span>
+        <span class="item-cost free">FREE</span>
       </div>
       <div class="item" data-item="weapon-laser" data-cost="80" data-slot="weapon">
         <span class="item-name">Weak Laser</span>
