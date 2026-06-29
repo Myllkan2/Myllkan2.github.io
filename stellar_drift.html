@@ -2439,12 +2439,13 @@ const debris = [];      // faste skibsstykker efter destruktion
 // tutorial-simulationen har ingen loot. Erstatter den faste end-of-fight bounty.
 const pickups = [];
 const COIN_PICKUP_VALUE = 10;          // coins pr. moent (brugeren: "de 10 coins")
-const WEAPON_DROP_CHANCE = 0.18;       // ~18% af kills dropper ogsaa et vaaben
+const WEAPON_DROP_CHANCE = 0.18;       // ~18% af kills dropper ogsaa et vaaben (efter foerste kill)
 const PICKUP_MAGNET_RADIUS = 130;      // px: indenfor denne afstand trækkes pickup mod skibet
-const PICKUP_COIN_LIFE = 12000;        // ms foer en moent forsvinder (blinker mod slut)
-const PICKUP_WEAPON_LIFE = 16000;      // ms — vaaben lever laengere (mere vaerdifuldt)
+// Pickups forsvinder IKKE af sig selv — de bliver liggende (driver/wrapper) til de
+// samles op, saa man ikke mister loot ved at naa det for sent. Ryddes ved restartGame.
 const DROP_WEAPONS = ['weapon-mg', 'weapon-laser', 'weapon-rl', 'weapon-rusty'];
 let coinsThisMission = 0;              // samlet i nuvaerende kamp — vises paa win-skaermen
+let firstKillWeaponDropped = false;    // foerste kill pr. mission GARANTERER et vaaben-drop
 
 // Vaabnenes visningsnavn i HUD'en.
 const WEAPON_NAMES = {
@@ -2499,15 +2500,17 @@ function refreshWeaponHUD() {
   weaponNameEl.classList.toggle('boosted', activeWeapons.length > 1);
 }
 
-// Drop loot fra en draebt fjende (kun post-graduation). Moent altid; vaaben nogle gange.
+// Drop loot fra en draebt fjende (kun post-graduation). Moent altid; vaaben dropper
+// GARANTERET ved missionens foerste kill, derefter med WEAPON_DROP_CHANCE.
 function spawnDrops(x, y, vx, vy) {
   if (!hasGraduated) return;
   spawnPickup(x, y, vx, vy, 'coin', null);
-  if (Math.random() < WEAPON_DROP_CHANCE) {
+  const guaranteed = !firstKillWeaponDropped;
+  if (guaranteed || Math.random() < WEAPON_DROP_CHANCE) {
     // Drop kun vaaben spilleren ikke allerede har aktivt (ingen nytteloese dubletter).
     const pool = DROP_WEAPONS.filter(w => !activeWeapons.includes(w));
     const w = pool[Math.floor(Math.random() * pool.length)];
-    if (w) spawnPickup(x, y, vx, vy, 'weapon', w);
+    if (w) { spawnPickup(x, y, vx, vy, 'weapon', w); firstKillWeaponDropped = true; }
   }
 }
 function spawnPickup(x, y, vx, vy, kind, weapon) {
@@ -2519,7 +2522,6 @@ function spawnPickup(x, y, vx, vy, kind, weapon) {
     vy: vy * 0.25 + Math.sin(ang) * kick,
     kind, weapon,
     radius: kind === 'coin' ? 9 : 13,
-    life:    kind === 'coin' ? PICKUP_COIN_LIFE : PICKUP_WEAPON_LIFE,
     spin: Math.random() * Math.PI * 2
   });
 }
@@ -2531,8 +2533,7 @@ function updatePickups(dtSec, dt) {
   const mag = PICKUP_MAGNET_RADIUS;
   for (let i = pickups.length - 1; i >= 0; i--) {
     const p = pickups[i];
-    p.life -= dt;
-    if (p.life <= 0) { pickups.splice(i, 1); continue; }
+    // Ingen despawn: pickups bliver liggende til de samles op (ryddes ved restartGame).
     const dx = player.x - p.x, dy = player.y - p.y;
     const dist2 = dx*dx + dy*dy;
     if (collectable && dist2 < mag * mag) {
@@ -2572,8 +2573,6 @@ function collectPickup(p) {
 // Tegn pickups: moenter (gyldne, "roterende") + vaaben-badges (farvet kapsel + label).
 function drawPickups() {
   for (const p of pickups) {
-    // Blink de sidste ~2.2s foer despawn som advarsel.
-    if (p.life < 2200 && Math.floor(p.life / 130) % 2 === 0) continue;
     ctx.save();
     ctx.translate(p.x, p.y);
     if (p.kind === 'coin') {
@@ -2652,7 +2651,8 @@ function restartGame() {
   particles.length = 0;
   debris.length = 0;
   pickups.length = 0;
-  coinsThisMission = 0;   // nyt stop -> ny opsamlings-taeller
+  coinsThisMission = 0;          // nyt stop -> ny opsamlings-taeller
+  firstKillWeaponDropped = false; // foerste kill paa stoppet garanterer et vaaben
   score = 0;
   scoreEl.textContent = 0;
   gameTime = 0;
