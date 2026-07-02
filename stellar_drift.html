@@ -3364,7 +3364,12 @@ function update(now) {
   const shipAccel = (SHIP_TYPES[equippedShip] || SHIP_TYPES['default']).accel || 1;
   // Rocket Motor Boost (shop-opgradering): +20% thrust naar den ejes.
   const boostMult = owned.upgrades.includes(BOOST_UPGRADE_ID) ? BOOST_MULT : 1;
-  const THRUST = 60 * moodFx().thrust * shipAccel * boostMult;   // mood-, skib- og boost-skaleret accel
+  // Base 84 (hævet fra 60, +40%, 2026-06-30 efter spiller-feedback: skibet foeltes
+  // for tungt/traegt). Fysikken (ren inerti, ingen friktion) er UAENDRET — kun
+  // accelerationskraften er stoerre, saa man kommer hurtigere op i fart og kan
+  // korrigere kurs mere aggressivt. Tiny-skib (+30%) og boost-koeb (+20%) ganges
+  // stadig ovenpaa som foer.
+  const THRUST = 84 * moodFx().thrust * shipAccel * boostMult;   // mood-, skib- og boost-skaleret accel
   const accelAngle = player.thrusterAngle + Math.PI;
   const ax = Math.cos(accelAngle) * THRUST * player.throttle;
   const ay = Math.sin(accelAngle) * THRUST * player.throttle;
