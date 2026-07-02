@@ -346,7 +346,7 @@
      i loop'en) — samme stil som mobil-udgaven — saa rumskibet kan ses bagved. */
   #portrait { transition: opacity 0.4s ease; }
   body.combat #portrait { opacity: 0.5; }
-  #gameOver, #titleScreen, #victory, #cutscene, #ambushWin, #familyCutscene, #homeEnding {
+  #gameOver, #titleScreen, #victory, #cutscene, #ambushWin, #familyCutscene, #homeEnding, #demoEnd {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     display: flex;
@@ -583,6 +583,44 @@
     letter-spacing: 4px;
     color: rgba(190, 215, 245, 0.8);
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    animation: gov-blink 1.5s ease-in-out infinite;
+  }
+  /* Demo-slut: enkel, varm afrunding — tak-for-nu-tone oven paa moerket. */
+  #demoEnd.visible {
+    opacity: 1;
+    transition: opacity 1.2s ease-in 0.3s;
+    background: rgba(4, 6, 12, 0.88);
+  }
+  #demoEnd .title {
+    font-size: 52px;
+    letter-spacing: 16px;
+    font-weight: 300;
+    color: rgba(255, 220, 150, 0.95);
+    text-shadow: 0 0 30px rgba(230, 180, 80, 0.55), 0 0 70px rgba(180, 120, 30, 0.35);
+    margin-bottom: 12px;
+    text-align: center;
+  }
+  #demoEnd .subtitle {
+    font-size: 12px;
+    letter-spacing: 8px;
+    color: rgba(220, 190, 140, 0.6);
+    margin-bottom: 32px;
+  }
+  #demoEnd .story {
+    font-size: 15px;
+    letter-spacing: 1.5px;
+    line-height: 1.75;
+    color: rgba(240, 230, 215, 0.88);
+    max-width: 640px;
+    text-align: center;
+    margin-bottom: 38px;
+    padding: 0 40px;
+    text-shadow: 0 0 10px rgba(200, 150, 60, 0.2);
+  }
+  #demoEnd .prompt {
+    font-size: 12px;
+    letter-spacing: 4px;
+    color: rgba(235, 210, 170, 0.75);
     animation: gov-blink 1.5s ease-in-out infinite;
   }
   /* Family-cutscene: melankolsk video-mellemspil mellem ambush-win og shop.
@@ -1155,6 +1193,19 @@
   <div class="prompt">TO BE CONTINUED &nbsp;—&nbsp; PRESS ANY KEY</div>
 </div>
 
+<!-- Demo-slut: vises efter HOME-endingen. Historien pauser her; spilleren kan
+     flyve ruten igen med alt sit udstyr (fri leg via startNewJourney). -->
+<div id="demoEnd">
+  <div class="title">END OF DEMO</div>
+  <div class="subtitle">STELLAR DRIFT &middot; CHAPTER ONE</div>
+  <div class="story">
+    This is where Brian's story pauses &mdash; for now.<br><br>
+    The search for his wife and daughter continues in a coming chapter. Thank you for playing the demo &mdash; your feedback shapes what happens next.<br><br>
+    Until then, the trade lanes are still crawling with pirates&hellip; and you still have a ship.
+  </div>
+  <div class="prompt">PRESS ANY KEY TO KEEP FLYING</div>
+</div>
+
 <!-- Family-cutscene: spilles efter ambush-win, foer shop. Veo-genereret video
      med Brians familiebillede og halvtomt whiskeyglas; Travel-musikken bærer scenen. -->
 <div id="familyCutscene">
@@ -1196,6 +1247,7 @@ const familyCutsceneVideo = document.getElementById('familyCutsceneVideo');
 const familyCutsceneSubtitleEl = document.getElementById('familyCutsceneSubtitle');
 const familyCutsceneSkipBtn = document.getElementById('familyCutsceneSkipBtn');
 const homeEndingEl = document.getElementById('homeEnding');
+const demoEndEl = document.getElementById('demoEnd');
 const cutsceneSubtitleEl = cutsceneEl.querySelector('.subtitle');
 const cutsceneStoryEl = cutsceneEl.querySelector('.story');
 const shopSubtitleEl = document.querySelector('#shop .shop-subtitle');
@@ -1394,6 +1446,9 @@ function isFinalLeg() { return legIndex >= HOME_LEGS.length - 1; }
 // Home-ending-state: cliffhanger naar sidste stop er ryddet. Genbruger ambushWon's
 // retreat/kollisions-fri slut-tilstand, men viser sit eget overlay (ikke family-cutscenen).
 let homeEndingVisible = false;
+// Demo-slut: vises EFTER home-endingen (historien pauser her i demoen). En tast
+// derfra starter en frisk rejse med beholdt udstyr (fri leg).
+let demoEndVisible = false;
 // Den lejede MG er en engangs-smagsprøve i tutorialen. Naar den udløber efter
 // bagholdet saettes mgRetired=true: MG'en forsvinder fra shoppen for altid, og
 // spillerens egne (håbløse) våben — Old Rusty Spacegun, Weak Laser — bliver i
@@ -2044,11 +2099,17 @@ window.addEventListener('keydown', e => {
     if (isMovementKey) e.preventDefault();
     return;
   }
+  // Demo-slut: en tast starter en frisk rejse (fri leg med beholdt udstyr).
+  if (demoEndVisible) {
+    if (!e.repeat && ambushInputReady) startNewJourney();
+    if (isMovementKey) e.preventDefault();
+    return;
+  }
   // HOME-ending: cliffhanger efter sidste stop. Skal afbrydes FOER ambushWon-
   // grenen (den deler retreat-tilstand) — ellers ville en tast starte family-
-  // cutscenen i stedet. En tast starter en frisk rejse.
+  // cutscenen i stedet. En tast gaar videre til demo-slut-skaermen.
   if (homeEndingVisible) {
-    if (!e.repeat && ambushInputReady) startNewJourney();
+    if (!e.repeat && ambushInputReady) showDemoEnd();
     if (isMovementKey) e.preventDefault();
     return;
   }
@@ -2142,7 +2203,8 @@ function overlayActive() {
 function advanceOverlayOnTouch() {
   if (titleVisible)        { startGameFromTitle(); return true; }
   if (victoryVisible)      { openShop(); return true; }
-  if (homeEndingVisible)   { if (ambushInputReady) startNewJourney(); return true; }
+  if (demoEndVisible)      { if (ambushInputReady) startNewJourney(); return true; }
+  if (homeEndingVisible)   { if (ambushInputReady) showDemoEnd(); return true; }
   if (ambushWon)           { if (ambushInputReady) proceedAfterAmbush(); return true; }
   if (familyCutsceneVisible) return false;  // kun skip-knappen (DOM 'click')
   if (shopVisible)           return false;  // shoppen styres af DOM-knapper
@@ -2865,9 +2927,11 @@ function restartGame() {
   ambushWinEl.classList.remove('visible');
   ambushWon = false;
   ambushInputReady = false;
-  // Defensiv: home-ending kan stadig staa hvis logikken kalder restartGame midt i.
+  // Defensiv: home-ending/demo-slut kan staa hvis logikken kalder restartGame midt i.
   homeEndingEl.classList.remove('visible');
   homeEndingVisible = false;
+  demoEndEl.classList.remove('visible');
+  demoEndVisible = false;
   // Defensiv: family-cutscene kan teoretisk stadig hænge hvis logikken kalder
   // restartGame midt i en overgang. Ryd op og stop Travel saa intet leaker.
   familyCutsceneEl.classList.remove('visible');
@@ -3237,9 +3301,22 @@ function triggerHomeEnding() {
   setTimeout(() => { ambushInputReady = true; }, 4800);
 }
 
-// Fra HOME-ending: start en frisk rejse (stop 1) men behold pung + ejede items
-// (en blød NG+). Tilbage i shoppen, klar til at flyve ud igen.
+// Fra HOME-ending: vis demo-slut-skaermen (historien pauser her i demoen).
+// Kort input-lockout saa tastetrykket fra HOME-skaermen ikke ogsaa lukker denne.
+function showDemoEnd() {
+  homeEndingEl.classList.remove('visible');
+  homeEndingVisible = false;
+  demoEndVisible = true;
+  ambushInputReady = false;
+  demoEndEl.classList.add('visible');
+  setTimeout(() => { ambushInputReady = true; }, 2000);
+}
+
+// Fra demo-slut: start en frisk rejse (stop 1) men behold pung + ejede items
+// (en blød NG+ / fri leg). Tilbage i shoppen, klar til at flyve ud igen.
 function startNewJourney() {
+  demoEndEl.classList.remove('visible');
+  demoEndVisible = false;
   homeEndingEl.classList.remove('visible');
   homeEndingVisible = false;
   ambushWon = false;
