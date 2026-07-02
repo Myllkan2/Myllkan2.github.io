@@ -2906,6 +2906,19 @@ function restartGame() {
   pickups.length = 0;
   coinsThisMission = 0;          // nyt stop -> ny opsamlings-taeller
   firstKillWeaponDropped = false; // foerste kill paa stoppet garanterer et vaaben
+  // Efter MG'ens udloeb aabner hvert stop med kun egne (svage) vaaben — rusty alene
+  // er for haardt som aabning. En laser-boble ligger derfor klar lige over start-
+  // positionen, saa foerste handling kan vaere at flyve ind i den. Springes over
+  // hvis laseren allerede er base-vaabnet (saa er der intet at hente).
+  if (hasGraduated && mgRetired && !activeWeapons.includes('weapon-laser')) {
+    pickups.push({
+      x: player.x, y: player.y - 220,
+      vx: 0, vy: 0,
+      kind: 'weapon', weapon: 'weapon-laser',
+      radius: 13,
+      spin: Math.random() * Math.PI * 2
+    });
+  }
   // Doed midt i tutorialen = forfra (styringen er tydeligvis ikke laert endnu).
   // Efter graduation / fuldfoert tutorial vises den aldrig igen.
   if (!hasGraduated && !tutorialCompleted) startTutorial();
