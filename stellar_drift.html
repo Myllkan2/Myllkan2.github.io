@@ -534,18 +534,24 @@
     color: rgba(200, 220, 240, 0.7);
     animation: gov-blink 1.5s ease-in-out infinite;
   }
-  /* HOME-ending: rolig, kølig blå-tone (hjemkomst), men cliffhanger-uro i teksten. */
+  /* HOME-ending: Brians soenderskudte hjem (BrianHome.jpeg) som baggrund, med et
+     moerkt slør henover saa historieteksten kan laeses. Vignette: lidt lysere paa
+     midten saa billedets detaljer (familieportraettet, ruinen) traeder frem. */
+  #homeEnding {
+    background:
+      linear-gradient(rgba(2, 6, 14, 0.78), rgba(2, 6, 14, 0.48) 38%, rgba(2, 6, 14, 0.48) 62%, rgba(2, 6, 14, 0.82)),
+      url('BrianHome.jpeg') center / cover no-repeat;
+  }
   #homeEnding.visible {
     opacity: 1;
     transition: opacity 1.6s ease-in 2.4s;   /* samme rolige timing som ambush-win */
-    background: rgba(2, 6, 14, 0.66);
   }
   #homeEnding .title {
     font-size: 60px;
     letter-spacing: 18px;
     font-weight: 300;
     color: rgba(190, 215, 245, 0.95);
-    text-shadow: 0 0 30px rgba(120, 170, 230, 0.6), 0 0 75px rgba(50, 100, 180, 0.4);
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85), 0 0 30px rgba(120, 170, 230, 0.6), 0 0 75px rgba(50, 100, 180, 0.4);
     margin-bottom: 12px;
     text-align: center;
   }
@@ -559,12 +565,13 @@
     font-size: 15px;
     letter-spacing: 1.5px;
     line-height: 1.75;
-    color: rgba(225, 235, 248, 0.86);
+    color: rgba(232, 240, 250, 0.94);
     max-width: 680px;
     text-align: center;
     margin-bottom: 38px;
     padding: 0 40px;
-    text-shadow: 0 0 10px rgba(70, 130, 200, 0.2);
+    /* Moerk drop-shadow: teksten skal staa skarpt oven paa ruin-billedet */
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 14px rgba(0, 0, 0, 0.65);
   }
   #homeEnding .story strong {
     color: rgba(210, 230, 255, 0.96);
@@ -574,7 +581,8 @@
   #homeEnding .prompt {
     font-size: 12px;
     letter-spacing: 4px;
-    color: rgba(190, 215, 245, 0.7);
+    color: rgba(190, 215, 245, 0.8);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
     animation: gov-blink 1.5s ease-in-out infinite;
   }
   /* Family-cutscene: melankolsk video-mellemspil mellem ambush-win og shop.
@@ -1139,8 +1147,9 @@
   <div class="title">HOME</div>
   <div class="subtitle">JOURNEY'S END</div>
   <div class="story">
-    The last engine spools down into the dark. Silence.<br><br>
-    You drift into the home berth you left years ago — and the dock is cold. No welcome lights. No signal. Only a single channel, open and breathing static, as if something there had been waiting a very long time for you to arrive.<br><br>
+    The last engine spools down. Home — or what is left of it.<br><br>
+    The roof torn open to the stars. The rooms gutted, cold, still smoking. Brian moves through the wreckage in silence, sorrowfully turning over the old things — the family portrait still hanging on the broken wall, the shattered china, the little things they touched every day — searching for any sign, any trace, of where his wife and daughter so suddenly vanished.<br><br>
+    Whoever did this left nothing behind. Except the certainty that <strong>someone</strong> did.<br><br>
     <strong>This isn't over, Brian.</strong>
   </div>
   <div class="prompt">TO BE CONTINUED &nbsp;—&nbsp; PRESS ANY KEY</div>
