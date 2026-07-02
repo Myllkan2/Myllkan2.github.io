@@ -153,6 +153,57 @@
     font-family: monospace;
     color: #aef;
   }
+  /* --- Tutorial (foerste mission): trin-for-trin guide der fuldfoeres ved at
+         UDFOERE handlingen (rotér/taend motor/sigt/skyd/draeb). --- */
+  #tutorial {
+    position: fixed;
+    bottom: 84px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    padding: 14px 26px;
+    background: rgba(4, 10, 22, 0.72);
+    border: 1px solid rgba(120, 170, 230, 0.35);
+    border-radius: 8px;
+    font-family: 'Segoe UI', sans-serif;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    max-width: 84vw;
+  }
+  #tutorial.visible { opacity: 1; }
+  #tutorial .tut-count {
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: rgba(150, 180, 220, 0.6);
+    margin-bottom: 6px;
+  }
+  #tutorial .tut-text {
+    font-size: 16px;
+    letter-spacing: 2px;
+    color: rgba(215, 232, 255, 0.95);
+    text-shadow: 0 0 12px rgba(100, 150, 255, 0.4);
+    animation: tut-pulse 1.6s ease-in-out infinite;
+  }
+  #tutorial .tut-text kbd {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 3px;
+    padding: 2px 7px;
+    margin: 0 2px;
+    font-family: monospace;
+    color: #aef;
+  }
+  /* Trin fuldfoert: kort groent bekraeftelses-blink foer naeste trin vises */
+  #tutorial.done .tut-text {
+    color: rgba(150, 235, 175, 0.95);
+    text-shadow: 0 0 14px rgba(80, 220, 130, 0.5);
+    animation: none;
+  }
+  @keyframes tut-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.62; }
+  }
   /* --- Touch controls (kun synlige paa touch-enheder) --- */
   #touchControls { display: none; }
   body.touch.combat #touchControls { display: block; }   /* kun under kamp — ikke i shop/titel/cutscene */
@@ -900,6 +951,13 @@
   <kbd>LMB</kbd> FIRE
 </div>
 
+<!-- Tutorial (foerste mission): trin fuldfoeres ved at UDFOERE handlingen.
+     Tekst + fremdrift styres af updateTutorial() i update-loopet. -->
+<div id="tutorial">
+  <div class="tut-count" id="tutorialCount">STEP 1 / 5</div>
+  <div class="tut-text" id="tutorialText"></div>
+</div>
+
 <div id="touchControls">
   <div id="joystick">
     <div id="joystickKnob"></div>
@@ -1139,6 +1197,9 @@ const heatFillEl = document.getElementById('heatFill');
 const heatPctEl = document.getElementById('heatPct');
 const weaponBlockEl = document.getElementById('weaponBlock');
 const weaponNameEl = document.getElementById('weaponName');
+const tutorialEl = document.getElementById('tutorial');
+const tutorialCountEl = document.getElementById('tutorialCount');
+const tutorialTextEl = document.getElementById('tutorialText');
 const portraitImgEl = document.getElementById('portraitImg');
 const portraitMoodEl = document.getElementById('portraitMood');
 
@@ -2057,6 +2118,7 @@ function enableTouchMode() {
   if (touchModeOn) return;
   touchModeOn = true;
   document.body.classList.add('touch');
+  refreshTutorialText();   // skift tutorial-instruktioner til touch-varianterne
 }
 
 // Er en overlay-skaerm fremme? Saa skal canvas-touch hverken sigte eller skyde.
@@ -2603,6 +2665,126 @@ function drawPickups() {
   }
 }
 
+// ===== TUTORIAL (foerste mission / Space Academy Simulation) =======================
+// Trin-for-trin guide der fuldfoeres ved at UDFOERE handlingen — ikke ved at laese.
+// Detektionen er input-agnostisk (maaler vinkler/throttle/skud), saa den virker for
+// baade tastatur+mus og touch; kun teksterne skifter. Fjender spawner foerst naar
+// styringen er laert (trin 1-4), saa man ikke bliver skudt mens man laerer at flyve.
+// Vises kun pre-graduation, én gang pr. session; doed midt i = forfra.
+let tutorialActive = false;
+let tutorialStep = 0;
+let tutorialCompleted = false;
+let tutRotateAccum = 0, tutThrustMs = 0, tutAimAccum = 0, tutMoodMs = 0;
+let tutPrevThruster = null, tutPrevTurret = null;
+let tutSwapTimer = null;
+
+const TUTORIAL_STEPS = [
+  { desktop: 'ROTATE THE THRUSTER &mdash; hold <kbd>A</kbd> / <kbd>D</kbd>',
+    touch:   'ROTATE &mdash; swing the LEFT stick around' },
+  { desktop: 'IGNITE THE ENGINE &mdash; hold <kbd>W</kbd>',
+    touch:   'THRUST &mdash; push the LEFT stick' },
+  { desktop: 'AIM &mdash; move the <kbd>MOUSE</kbd>, the turret follows',
+    touch:   'AIM &mdash; push the RIGHT stick' },
+  { desktop: 'FIRE &mdash; hold <kbd>LMB</kbd>',
+    touch:   'FIRE &mdash; hold the RIGHT stick down' },
+  // Info-trin (auto-avancerer paa tid): humoer-mekanikken. Kills loefter Brians
+  // humoer, hits saenker det — og humoeret skalerer thrust/skudtakt/sigte (moodFx).
+  { desktop: 'BRIAN&rsquo;S MOOD (top right) AFFECTS HANDLING<br>KILLS LIFT IT &mdash; GETTING HIT DROPS IT',
+    touch:   'BRIAN&rsquo;S MOOD (top right) AFFECTS HANDLING<br>KILLS LIFT IT &mdash; GETTING HIT DROPS IT' },
+  { desktop: 'DESTROY THE DRONES &mdash; reach 1000 POINTS',
+    touch:   'DESTROY THE DRONES &mdash; reach 1000 POINTS' }
+];
+
+function refreshTutorialText() {
+  if (!tutorialActive) return;
+  tutorialCountEl.textContent = 'STEP ' + Math.min(tutorialStep + 1, TUTORIAL_STEPS.length) + ' / ' + TUTORIAL_STEPS.length;
+  tutorialTextEl.innerHTML = touchModeOn
+    ? TUTORIAL_STEPS[Math.min(tutorialStep, TUTORIAL_STEPS.length - 1)].touch
+    : TUTORIAL_STEPS[Math.min(tutorialStep, TUTORIAL_STEPS.length - 1)].desktop;
+}
+function startTutorial() {
+  tutorialActive = true;
+  tutorialStep = 0;
+  tutRotateAccum = 0; tutThrustMs = 0; tutAimAccum = 0; tutMoodMs = 0;
+  tutPrevThruster = null; tutPrevTurret = null;
+  clearTimeout(tutSwapTimer);
+  tutorialEl.classList.remove('done');
+  refreshTutorialText();
+  tutorialEl.classList.add('visible');
+}
+function hideTutorial() {
+  tutorialActive = false;
+  clearTimeout(tutSwapTimer);
+  tutorialEl.classList.remove('visible');
+  tutorialEl.classList.remove('done');
+}
+// Trin fuldfoert: groent blink paa den gamle tekst, saa naeste trin efter 0.5s.
+// tutorialStep taeller op med det samme saa spawn-gating/detektion foelger med.
+function advanceTutorialStep() {
+  tutorialStep++;
+  sfxCoinPickup({ volume: 0.7 });
+  tutorialEl.classList.add('done');
+  clearTimeout(tutSwapTimer);
+  tutSwapTimer = setTimeout(() => {
+    tutorialEl.classList.remove('done');
+    refreshTutorialText();
+  }, 500);
+}
+function completeTutorial() {
+  tutorialCompleted = true;
+  tutorialEl.classList.add('done');
+  tutorialCountEl.textContent = '';
+  tutorialTextEl.textContent = 'FIRST KILL CONFIRMED — REACH 1000 POINTS';
+  sfxWeaponPickup({ volume: 0.7 });
+  clearTimeout(tutSwapTimer);
+  tutSwapTimer = setTimeout(hideTutorial, 3200);
+}
+// Kaldes hver frame fra update-loopet. Vinkel-deltas normaliseres mod wrap.
+function updateTutorial(dt) {
+  if (!tutorialActive || tutorialCompleted) return;
+  if (!player.alive || player.dying) return;
+  switch (tutorialStep) {
+    case 0: {   // ROTÉR: akkumuleret thruster-rotation
+      if (tutPrevThruster !== null) {
+        let d = player.thrusterAngle - tutPrevThruster;
+        while (d >  Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        tutRotateAccum += Math.abs(d);
+      }
+      tutPrevThruster = player.thrusterAngle;
+      if (tutRotateAccum > 0.9) advanceTutorialStep();
+      break;
+    }
+    case 1:     // TAEND MOTOR: hold throttle ~0.6s
+      if (player.throttle > 0.3) tutThrustMs += dt;
+      if (tutThrustMs > 600) advanceTutorialStep();
+      break;
+    case 2: {   // SIGT: akkumuleret taarn-rotation
+      if (tutPrevTurret !== null) {
+        let d = player.turretAngle - tutPrevTurret;
+        while (d >  Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        tutAimAccum += Math.abs(d);
+      }
+      tutPrevTurret = player.turretAngle;
+      if (tutAimAccum > 0.9) advanceTutorialStep();
+      break;
+    }
+    case 3:     // SKYD: et affyret projektil (eller laser-straale)
+      if (bullets.length > 0 || laserBeam.active) advanceTutorialStep();
+      break;
+    case 4:     // HUMOER (info): auto-avancer efter laesetid. Naar spilleren at
+                // draebe imens, er lektionen demonstreret — spring direkte til faerdig.
+      tutMoodMs += dt;
+      if (score > 0) { completeTutorial(); break; }
+      if (tutMoodMs > 6500) advanceTutorialStep();
+      break;
+    case 5:     // DRAEB: foerste kill (score taeller op ved eksplosionen)
+      if (score > 0) completeTutorial();
+      break;
+  }
+}
+
 function spawnPlayer() {
   // Anvend ship-config baseret paa hvad spilleren har udstyret.
   const cfg = SHIP_TYPES[equippedShip] || SHIP_TYPES['default'];
@@ -2653,6 +2835,10 @@ function restartGame() {
   pickups.length = 0;
   coinsThisMission = 0;          // nyt stop -> ny opsamlings-taeller
   firstKillWeaponDropped = false; // foerste kill paa stoppet garanterer et vaaben
+  // Doed midt i tutorialen = forfra (styringen er tydeligvis ikke laert endnu).
+  // Efter graduation / fuldfoert tutorial vises den aldrig igen.
+  if (!hasGraduated && !tutorialCompleted) startTutorial();
+  else hideTutorial();
   score = 0;
   scoreEl.textContent = 0;
   gameTime = 0;
@@ -2969,6 +3155,8 @@ function updateHeatHUD() {
 
 function triggerVictory() {
   // Spilleren har bestaaet simulationen — frys gameplay og vis license-overlay.
+  tutorialCompleted = true;   // defensiv: bestaaet = tutorial faerdig uanset trin
+  hideTutorial();
   victoryVisible = true;
   victoryEl.classList.add('visible');
   // Markér graduation: alle senere missioner kører paa fuld svaerhedsgrad,
@@ -3199,6 +3387,8 @@ function startGameFromTitle() {
   familyCutscenePlayed = false;
   brianStartMood = BRIAN_DEFAULT;
   setBrianMood(BRIAN_DEFAULT);
+  // Foerste mission = simulation: start tutorialen (én gang pr. session).
+  if (!hasGraduated && !tutorialCompleted) startTutorial();
   stopTitleMusic();
   playGameMusic();
   // Nulstil dt-akkumulering saa update'en ikke faar en kaempe foerste delta.
@@ -3460,6 +3650,9 @@ function update(now) {
   touchFireRequest = false;
   }  // end: dying / alive dispatch
 
+  // --- Tutorial-fremdrift (foerste mission) ---
+  updateTutorial(dt);
+
   // --- Update bullets ---
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
@@ -3599,6 +3792,11 @@ function update(now) {
   // Boelge-baseret. Simulation (pre-graduation) er mere blid end post-shop, saa
   // tutorial-fasen ikke skal vaere lige saa svaer som "rigtig" kamp efter shoppen.
   // Ambush-win: ingen nye pirater spawner — dem der er paa skaermen flygter.
+  // Tutorial-gate: ingen fjender foer styringen er laert (trin 1-4 fuldfoert),
+  // saa man ikke bliver skudt mens man laerer at flyve. Trin 5 ("destroy") slipper dem loes.
+  if (!hasGraduated && tutorialActive && !tutorialCompleted && tutorialStep < 4) {
+    nextEnemyTime = gameTime + 2500;
+  }
   if (gameTime > nextEnemyTime && !ambushWon) {
     // Post-graduation: parametre kommer fra det aktuelle rejse-stop (skalerer pr.
     // leg — flere/haardere boelger jo taettere paa hjem). Tutorial er uaendret.
