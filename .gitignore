@@ -15,6 +15,9 @@ desktop.ini
 *_backup.html
 scratch/
 
+# Play Store-marketing (hoerer ikke hjemme paa den offentlige Pages-side)
+store-assets/
+
 # Android / Play-pakke — MAA ALDRIG i offentligt repo (hemmelig noegle + passwords)
 *.zip
 *.keystore
