@@ -668,6 +668,30 @@
     color: rgba(235, 210, 170, 0.75);
     animation: gov-blink 1.5s ease-in-out infinite;
   }
+  /* Rate-knap: gylden og diskret. Vises paa demo-slut (milepael — spilleren har
+     lige gennemfoert kapitlet og er mest positiv) og i shoppen (det faste,
+     lav-tryk sted). pointer-events: auto fordi overlay-basen har none. */
+  .rate-btn {
+    display: inline-block;
+    margin-bottom: 30px;
+    padding: 10px 22px;
+    border: 1px solid rgba(230, 190, 110, 0.45);
+    border-radius: 6px;
+    background: rgba(60, 45, 15, 0.35);
+    color: rgba(255, 220, 150, 0.92);
+    font-size: 12px;
+    letter-spacing: 3px;
+    text-decoration: none;
+    pointer-events: auto;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+  .rate-btn:hover {
+    background: rgba(90, 68, 25, 0.55);
+    border-color: rgba(255, 220, 150, 0.8);
+  }
+  .rate-btn .star { color: #ffd76a; }
+  #shop .rate-btn { margin-bottom: 0; margin-top: 20px; }
   /* Family-cutscene: melankolsk video-mellemspil mellem ambush-win og shop.
      Helt sort baggrund — videoen baerer scenen, undertekster lagt ovenpaa. */
   #familyCutscene {
@@ -1211,6 +1235,8 @@
   </div>
   <button class="launch-btn" id="shopLaunch" disabled>LAUNCH</button>
   <div class="launch-hint" id="shopLaunchHint">REQUIRES 1 SPACECRAFT + 1 WEAPON</div>
+  <a class="rate-btn" href="https://play.google.com/store/apps/details?id=com.myllkan.stellardrift"
+     target="_blank" rel="noopener"><span class="star">&#9733;</span> ENJOYING THE RIDE? RATE STELLAR DRIFT</a>
 </div>
 
 <div id="cutscene">
@@ -1259,6 +1285,8 @@
     The search for his wife and daughter continues in a coming chapter. Thank you for playing the demo &mdash; your feedback shapes what happens next.<br><br>
     Until then, the trade lanes are still crawling with pirates&hellip; and you still have a ship.
   </div>
+  <a class="rate-btn" href="https://play.google.com/store/apps/details?id=com.myllkan.stellardrift"
+     target="_blank" rel="noopener"><span class="star">&#9733;</span> RATE STELLAR DRIFT</a>
   <div class="prompt">PRESS ANY KEY TO KEEP FLYING</div>
 </div>
 
@@ -2359,6 +2387,10 @@ function advanceOverlayOnTouch() {
 
 window.addEventListener('touchstart', e => {
   enableTouchMode();
+  // Rate-knappen haandterer sit eget tryk (aabner Play Store-siden). Den maa
+  // ikke samtidig taelle som "tryk for at fortsaette" paa demo-slut-skaermen —
+  // saa ville spilleren miste skaermen bag sig i samme oejeblik.
+  if (e.target.closest && e.target.closest('.rate-btn')) return;
   if (advanceOverlayOnTouch()) e.preventDefault();
 }, { passive: false });
 
