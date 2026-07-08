@@ -346,7 +346,7 @@
      i loop'en) — samme stil som mobil-udgaven — saa rumskibet kan ses bagved. */
   #portrait { transition: opacity 0.4s ease; }
   body.combat #portrait { opacity: 0.5; }
-  #gameOver, #titleScreen, #victory, #cutscene, #ambushWin, #familyCutscene, #homeEnding, #demoEnd {
+  #gameOver, #titleScreen, #victory, #cutscene, #ambushWin, #familyCutscene, #homeEnding, #demoEnd, #pauseScreen {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     display: flex;
@@ -362,6 +362,51 @@
   #gameOver.visible {
     opacity: 1;
     transition: opacity 1s ease-in 0.5s;  /* langsom fade-in efter doed */
+  }
+  /* Pause: øjeblikkelig visning (ingen fade-in — pausen skal foeles instant).
+     pointer-events: auto saa klik/tryk rammer overlayet og ikke canvas'en
+     nedenunder (ellers ville et resume-klik affyre kanonen). */
+  #pauseScreen.visible {
+    opacity: 1;
+    transition: none;
+    pointer-events: auto;
+  }
+  #pauseScreen .title {
+    font-size: 56px;
+    letter-spacing: 14px;
+    font-weight: 300;
+    color: rgba(220, 235, 255, 0.95);
+    text-shadow: 0 0 30px rgba(150, 200, 255, 0.7), 0 0 60px rgba(80, 140, 220, 0.4);
+    margin-bottom: 28px;
+  }
+  /* Pauseknap: diskret oppe midtfor (top-venstre har HUD, top-hoejre portraettet).
+     Vises kun under aktiv kamp via body.combat — samme signal som styrer
+     portraettets gennemsigtighed. */
+  #pauseBtn {
+    position: fixed;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 46px;
+    height: 46px;
+    background: rgba(20, 32, 54, 0.5);
+    border: 1px solid rgba(120, 150, 200, 0.35);
+    border-radius: 8px;
+    cursor: pointer;
+    z-index: 5;
+  }
+  body.combat #pauseBtn { display: flex; }
+  #pauseBtn:hover { background: rgba(40, 60, 100, 0.6); border-color: rgba(180, 210, 255, 0.6); }
+  #pauseBtn .bar {
+    width: 5px;
+    height: 18px;
+    background: rgba(200, 220, 255, 0.85);
+    border-radius: 1px;
+    box-shadow: 0 0 6px rgba(120, 170, 255, 0.5);
   }
   #titleScreen.visible {
     opacity: 1;
@@ -872,7 +917,7 @@
     margin-top: 14px;
     min-height: 12px;
   }
-  #gameOver .prompt, #titleScreen .prompt {
+  #gameOver .prompt, #titleScreen .prompt, #pauseScreen .prompt {
     font-size: 12px;
     letter-spacing: 4px;
     color: rgba(200, 220, 255, 0.7);
@@ -911,6 +956,7 @@
     }
     #gameOver .title { font-size: 40px; letter-spacing: 8px; }
     #victory .title  { font-size: 34px; letter-spacing: 7px; }
+    #pauseScreen .title { font-size: 36px; letter-spacing: 8px; }
 
     /* Pilot-portraet: halv stoerrelse + halvt gennemsigtigt */
     #portrait {
@@ -1029,6 +1075,16 @@
 <div id="gameOver">
   <div class="title">GAME OVER</div>
   <div class="prompt">PRESS ANY KEY TO RESTART</div>
+</div>
+
+<!-- Pause: knappen vises kun under aktiv kamp (body.combat). Overlayet fryser
+     spillet via update-loopets overlay-check og pauser al musik. -->
+<button id="pauseBtn" aria-label="Pause game">
+  <span class="bar"></span><span class="bar"></span>
+</button>
+<div id="pauseScreen">
+  <div class="title">PAUSED</div>
+  <div class="prompt">PRESS ANY KEY OR TAP TO RESUME</div>
 </div>
 
 <div id="victory">
@@ -1263,6 +1319,8 @@ const tutorialCountEl = document.getElementById('tutorialCount');
 const tutorialTextEl = document.getElementById('tutorialText');
 const portraitImgEl = document.getElementById('portraitImg');
 const portraitMoodEl = document.getElementById('portraitMood');
+const pauseScreenEl = document.getElementById('pauseScreen');
+const pauseBtnEl = document.getElementById('pauseBtn');
 
 // Brians humør-stige, fra værst til bedst. Index 5 = CONTENT er default.
 // Mekanikker bag skift kobles paa senere — for nu er det rent kosmetisk state.
@@ -1387,6 +1445,9 @@ const CUTSCENE_VIDEO_VOLUME = 0.45;
 
 // Title-state og musik-helpere
 let titleVisible = true;
+// Pause: fryser update-loopet og pauser musikken. Kan kun aktiveres under aktiv
+// kamp (ikke oven paa andre overlays — de fryser allerede spillet selv).
+let pausedVisible = false;
 // Victory-state: saettes naar score naar 1000 — fryser gameplay og viser overlay.
 let victoryVisible = false;
 // Simulation vs. post-shop sværhedsgrad. False ved ny session — efter foerste
@@ -1489,6 +1550,28 @@ function stopTitleMusic() { stopTrack(titleMusicEl); }
 function playGameMusic()  { gameMusicEl.volume = 0.55; playTrack(gameMusicEl); }
 function stopGameMusic()  { stopTrack(gameMusicEl);  }
 function stopTravelMusic(){ stopTrack(travelMusicEl); }
+
+// ===== PAUSE AF MUSIK (pauseskaerm + app i baggrunden) ==========================
+// Pauser de spor der spiller NU og husker dem, saa resume kan genoptage praecis
+// dem — uden at nulstille currentTime (vigtigt for playlist-mode, hvor et spor
+// skal kunne spille faerdigt hen over pausen). Merger i stedet for at overskrive,
+// saa et dobbelt-kald (pauseskaerm + visibilitychange) ikke mister listen.
+let interruptedMusic = [];
+function pauseAllMusic() {
+  [titleMusicEl, gameMusicEl, travelMusicEl].forEach(el => {
+    if (!el.paused) {
+      el.pause();
+      if (!interruptedMusic.includes(el)) interruptedMusic.push(el);
+    }
+  });
+}
+function resumeInterruptedMusic() {
+  interruptedMusic.forEach(el => {
+    const p = el.play();
+    if (p) p.catch(() => {});
+  });
+  interruptedMusic = [];
+}
 
 // Fader Travel-musikken blødt fra 0 op til target over `duration` ms. Bruges
 // af family-cutscenen saa musikken ikke slaar brutalt ind oven paa retreat-
@@ -2087,6 +2170,12 @@ const mouse = { x: 0, y: 0, down: false };
 
 window.addEventListener('keydown', e => {
   const isMovementKey = ['KeyW','KeyA','KeyS','KeyD','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code);
+  // Pause: enhver tast genoptager (samme moenster som de andre overlays).
+  if (pausedVisible) {
+    if (!e.repeat) resumeGame();
+    if (isMovementKey) e.preventDefault();
+    return;
+  }
   // Titelskaerm: foerste tast unlock'er audio + starter spillet.
   if (titleVisible) {
     if (!e.repeat) startGameFromTitle();
@@ -2150,6 +2239,11 @@ window.addEventListener('keydown', e => {
     if (isMovementKey) e.preventDefault();
     return;
   }
+  // Aktiv kamp: Escape/P pauser (alle overlay-tilstande er returneret ovenfor).
+  if (e.code === 'Escape' || e.code === 'KeyP') {
+    if (!e.repeat) pauseGame();
+    return;
+  }
   keys[e.code] = true;
   if (isMovementKey) e.preventDefault();
 });
@@ -2162,7 +2256,7 @@ window.addEventListener('keydown', e => {
   if (e.code !== 'KeyK' || e.repeat) return;
   if (!hasGraduated || ambushWon) return;
   if (!player.alive || player.dying) return;
-  if (titleVisible || victoryVisible || shopVisible || cutsceneVisible || familyCutsceneVisible) return;
+  if (titleVisible || victoryVisible || shopVisible || cutsceneVisible || familyCutsceneVisible || pausedVisible) return;
   pirateKills = currentLeg().killTarget - 1;
   console.log('[CHEAT] pirateKills =', pirateKills, '/', currentLeg().killTarget, '— naeste kill rydder stop', legIndex + 1);
 });
@@ -2194,13 +2288,63 @@ function enableTouchMode() {
 // Er en overlay-skaerm fremme? Saa skal canvas-touch hverken sigte eller skyde.
 function overlayActive() {
   return titleVisible || victoryVisible || shopVisible ||
-         cutsceneVisible || familyCutsceneVisible || ambushWon || !player.alive;
+         cutsceneVisible || familyCutsceneVisible || ambushWon || !player.alive ||
+         pausedVisible;
 }
+
+// ===== PAUSE =====================================================================
+// Kun under aktiv kamp — andre overlays fryser allerede spillet, og at pause midt
+// i dying-animationen ville fryse skibet halvvejs inde i sin egen eksplosion.
+function pauseGame() {
+  if (pausedVisible || player.dying || titleVisible || victoryVisible || shopVisible ||
+      cutsceneVisible || familyCutsceneVisible || ambushWon || !player.alive) return;
+  pausedVisible = true;
+  pauseScreenEl.classList.add('visible');
+  pauseAllMusic();
+  // Slip alt input: en tast/knap der holdes nede maa ikke "hænge fast" gennem
+  // pausen og fyre thrust/kanon i samme oejeblik der genoptages.
+  for (const k in keys) keys[k] = false;
+  mouse.down = false;
+  stopThrust();
+  stopLaserHum(); stopLaserWeld();
+}
+function resumeGame() {
+  if (!pausedVisible) return;
+  pausedVisible = false;
+  pauseScreenEl.classList.remove('visible');
+  resumeInterruptedMusic();
+}
+pauseBtnEl.addEventListener('click', pauseGame);
+// Mus: klik paa pauseskaermen genoptager. Overlayet har pointer-events: auto naar
+// det er synligt, saa klikket naar ALDRIG canvas'en (ingen vaadeskud ved resume).
+pauseScreenEl.addEventListener('click', resumeGame);
+
+// App i baggrunden (Android home-knap, tab-skift): al lyd skal tie OEJEBLIKKELIGT,
+// og aktiv kamp skal pause saa spilleren ikke bliver skudt i blinde.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    pauseGame();       // no-op hvis et andet overlay allerede fryser spillet
+    pauseAllMusic();   // ogsaa titel/shop/game-over-musik — intet spiller i baggrunden
+    if (!familyCutsceneVideo.paused) familyCutsceneVideo.pause();
+    stopThrust();
+    stopLaserHum(); stopLaserWeld();
+  } else {
+    // Tilbage i appen: cutscene-videoen genoptages (den baerer sin egen lyd).
+    // Musikken genoptages kun naar spillet IKKE staar paa pauseskaermen — dér
+    // venter den paa spillerens resume, saa lyd og gameplay starter samtidig.
+    if (familyCutsceneVisible) {
+      const p = familyCutsceneVideo.play();
+      if (p) p.catch(() => {});
+    }
+    if (!pausedVisible) resumeInterruptedMusic();
+  }
+});
 
 // Spejler keydown-handlerens "tryk for at fortsaette"-logik for touch. Returnerer
 // true hvis touchen blev brugt til at avancere en overlay (saa undgaar vi at
 // preventDefault'e paa shop/skip-knapper der selv haandterer 'click').
 function advanceOverlayOnTouch() {
+  if (pausedVisible)       { resumeGame(); return true; }
   if (titleVisible)        { startGameFromTitle(); return true; }
   if (victoryVisible)      { openShop(); return true; }
   if (demoEndVisible)      { if (ambushInputReady) startNewJourney(); return true; }
@@ -2953,6 +3097,11 @@ function restartGame() {
   clearTimeout(familyCutsceneSkipTimer);
   if (!familyCutsceneVideo.paused) familyCutsceneVideo.pause();
   clearFamilyCutsceneSubtitle();
+  // Defensiv: pauseskaermen kan i teorien staa hvis logikken kalder restartGame
+  // udenom resume. Ryd flag + husket musik saa intet genoptages ved naeste resume.
+  pauseScreenEl.classList.remove('visible');
+  pausedVisible = false;
+  interruptedMusic = [];
   pirateKills = 0;
   mouse.down = false;   // forhindrer at LMB-klik paa LAUNCH-knappen straks affyrer kanonen
   // Musik: foer playlist-mode skifter vi tilbage til kampsporet (som foer). Naar
@@ -3540,7 +3689,7 @@ let lastTime = performance.now();
 function update(now) {
   // Frys spillet mens titel, victory eller shop vises — opdater lastTime saa dt
   // ikke akkumulerer under pause.
-  if (titleVisible || victoryVisible || shopVisible || cutsceneVisible || familyCutsceneVisible) {
+  if (titleVisible || victoryVisible || shopVisible || cutsceneVisible || familyCutsceneVisible || pausedVisible) {
     lastTime = now;
     stopLaserHum(); stopLaserWeld();   // ingen lingering laser-lyd under overlays
     return;
