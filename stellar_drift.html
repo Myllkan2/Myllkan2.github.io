@@ -408,6 +408,51 @@
     border-radius: 1px;
     box-shadow: 0 0 6px rgba(120, 170, 255, 0.5);
   }
+  /* Lyd-toggles: musik + sfx, samme udtryk som pauseknappen. ALTID synlige —
+     musikken spiller ogsaa paa titelskaerm og i shoppen, saa de skal kunne naas
+     overalt. z-index over touch-joysticks (50) og overlays, saa de kan klikkes
+     selv naar pauseskaerm/shop har pointer-events: auto. */
+  #audioToggles {
+    position: fixed;
+    top: 14px;
+    left: calc(50% + 31px);   /* klods op ad pauseknappens hoejre kant: 23px halv bredde + 8px gap */
+    display: flex;
+    gap: 8px;
+    z-index: 60;
+  }
+  #audioToggles button {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+    background: rgba(20, 32, 54, 0.5);
+    border: 1px solid rgba(120, 150, 200, 0.35);
+    border-radius: 8px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #audioToggles button:hover { background: rgba(40, 60, 100, 0.6); border-color: rgba(180, 210, 255, 0.6); }
+  #audioToggles svg {
+    stroke: rgba(200, 220, 255, 0.85);
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 0 4px rgba(120, 170, 255, 0.5));
+  }
+  #audioToggles button.muted svg { opacity: 0.3; filter: none; }
+  #audioToggles button.muted::after {
+    content: '';
+    position: absolute;
+    width: 30px;
+    height: 2px;
+    background: rgba(255, 130, 130, 0.85);
+    box-shadow: 0 0 6px rgba(255, 80, 80, 0.5);
+    border-radius: 1px;
+    transform: rotate(-45deg);
+  }
   #titleScreen.visible {
     opacity: 1;
   }
@@ -1111,6 +1156,25 @@
   <div class="prompt">PRESS ANY KEY OR TAP TO RESUME</div>
 </div>
 
+<!-- Lyd-toggles: musik og sfx kan slaas fra uafhaengigt af hinanden. Valget
+     gemmes i localStorage og overlever sessioner. -->
+<div id="audioToggles">
+  <button id="musicToggle" aria-label="Toggle music">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <path d="M9 18 V5 l12 -2 v13"/>
+      <circle cx="6" cy="18" r="3"/>
+      <circle cx="18" cy="16" r="3"/>
+    </svg>
+  </button>
+  <button id="sfxToggle" aria-label="Toggle sound effects">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+      <path d="M15.5 8.5 a5 5 0 0 1 0 7"/>
+      <path d="M19 5 a10 10 0 0 1 0 14"/>
+    </svg>
+  </button>
+</div>
+
 <div id="victory">
   <div class="title">LICENSE GRANTED</div>
   <div class="message">
@@ -1690,15 +1754,53 @@ function getAudioCtx() {
   return audioCtx;
 }
 
+const SFX_VOLUME = 0.45;   // master sfx-volume; musikken spiller paa 0.55-0.6
 function getSfxGain() {
   if (sfxGain) return sfxGain;
   const ctx = getAudioCtx();
   if (!ctx) return null;
   sfxGain = ctx.createGain();
-  sfxGain.gain.value = 0.45;   // master sfx-volume; musikken spiller paa 0.55-0.6
+  sfxGain.gain.value = sfxMuted ? 0 : SFX_VOLUME;
   sfxGain.connect(ctx.destination);
   return sfxGain;
 }
+
+// ===== LYD-TOGGLES (musik / sfx) ==============================================
+// Musik mutes via el.muted i stedet for pause: playlist-sporene skal blive ved
+// med at "spille" (deres 'ended'-events driver spor-skiftet), og volume-fades
+// (fadeInTravelMusic) overskriver ikke muted-flaget. SFX gaar alle gennem én
+// master-gain, saa dér er 0/SFX_VOLUME nok. Cutscene-videoen foelger MUSIK-
+// togglen: den er stemningsbaerende baggrundslyd, ikke et vaaben-pling.
+const MUSIC_MUTED_KEY = 'stellardrift.audio.musicMuted';
+const SFX_MUTED_KEY   = 'stellardrift.audio.sfxMuted';
+let musicMuted = localStorage.getItem(MUSIC_MUTED_KEY) === '1';
+let sfxMuted   = localStorage.getItem(SFX_MUTED_KEY) === '1';
+const musicToggleEl = document.getElementById('musicToggle');
+const sfxToggleEl   = document.getElementById('sfxToggle');
+
+function applyAudioMutes() {
+  [titleMusicEl, gameMusicEl, travelMusicEl].forEach(el => { el.muted = musicMuted; });
+  document.getElementById('familyCutsceneVideo').muted = musicMuted;
+  if (sfxGain) sfxGain.gain.value = sfxMuted ? 0 : SFX_VOLUME;
+  musicToggleEl.classList.toggle('muted', musicMuted);
+  sfxToggleEl.classList.toggle('muted', sfxMuted);
+}
+
+// blur() efter klik: en fokuseret knap ville ellers blive "klikket" igen af
+// Space/Enter — og Space er thrust midt i kampen.
+musicToggleEl.addEventListener('click', () => {
+  musicMuted = !musicMuted;
+  localStorage.setItem(MUSIC_MUTED_KEY, musicMuted ? '1' : '0');
+  applyAudioMutes();
+  musicToggleEl.blur();
+});
+sfxToggleEl.addEventListener('click', () => {
+  sfxMuted = !sfxMuted;
+  localStorage.setItem(SFX_MUTED_KEY, sfxMuted ? '1' : '0');
+  applyAudioMutes();
+  sfxToggleEl.blur();
+});
+applyAudioMutes();
 
 function getNoiseBuffer() {
   if (noiseBuffer) return noiseBuffer;
@@ -2399,6 +2501,9 @@ window.addEventListener('touchstart', e => {
   // ikke samtidig taelle som "tryk for at fortsaette" paa demo-slut-skaermen —
   // saa ville spilleren miste skaermen bag sig i samme oejeblik.
   if (e.target.closest && e.target.closest('.rate-btn')) return;
+  // Lyd-toggles haandterer deres eget 'click' — et tryk paa dem maa ikke
+  // samtidig starte spillet fra titelskaermen eller genoptage fra pause.
+  if (e.target.closest && e.target.closest('#audioToggles')) return;
   if (advanceOverlayOnTouch()) e.preventDefault();
 }, { passive: false });
 
