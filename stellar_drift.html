@@ -1429,6 +1429,14 @@ function moodFx() { return MOOD_EFFECTS[brianMood] || MOOD_EFFECTS.Content; }
 const RUSTY_SPREAD_DEG = 8;
 const RUSTY_SPEED = 1000;          // px/s, mood-skaleret — lidt under MG-slug
 
+// Fjende-skrog: akkumulerede hits foer dying-fasen starter. Var 5 — sat 40%
+// ned efter spillerfeedback (fjenden foeltes for haard at faelde).
+const ENEMY_MAX_HITS  = 3;
+// Visuel/SFX-tier: hits OVER denne graense giver fire-maerker i stedet for
+// crack. Var 2 da max var 5 (de sidste to trin braendte) — skaleret med saa
+// sidste trin foer doeden stadig braender.
+const ENEMY_FIRE_TIER = 1;
+
 // Weak Laser: hitscan-stråle (lysets hastighed). Svag i starten, men skaden
 // rampes op mens man HOLDER strålen paa en fjende — som en lup der skal holdes
 // stille for at taende ild. Charge 0→1 paa ~2s; glider strålen af koeler den
@@ -1436,8 +1444,8 @@ const RUSTY_SPEED = 1000;          // px/s, mood-skaleret — lidt under MG-slug
 const LASER_RANGE       = 1300;
 const LASER_CHARGE_RATE = 0.5;     // charge/sek mens strålen rammer en fjende (~2s til max)
 const LASER_DECAY_RATE  = 2.5;     // charge/sek naar den ikke rammer noget
-const LASER_DPS_MIN     = 0.28;    // skade/sek ved charge 0 (fjende dør ved 5)
-const LASER_DPS_MAX     = 1.75;    // skade/sek ved fuld charge (~2.9s/drab ved fuld charge)
+const LASER_DPS_MIN     = 0.28;    // skade/sek ved charge 0 (fjende dør ved ENEMY_MAX_HITS)
+const LASER_DPS_MAX     = 1.75;    // skade/sek ved fuld charge (~1.7s/drab ved fuld charge)
 let laserCharge = 0;
 // Fjenden strålen p.t. "taender op" paa. Skifter strålen til en ny fjende (eller
 // slipper helt), starter optaendingen forfra — saa man ikke kan baere fuld charge
@@ -4229,7 +4237,7 @@ function update(now) {
         const lightBullet = isMG || b.kind === 'rusty';
         if (lightBullet) spawnSpark(b.x, b.y, b.angle);
         else             spawnExplosion(b.x, b.y, b.angle);
-        // Damage: raket = 1 hit, MG/rusty = 1/6 hit (30 kugler droeber en fjende).
+        // Damage: raket = 1 hit, MG/rusty = 1/6 hit (18 kugler droeber en fjende).
         // e.hits er fra nu af en float.
         const damage = lightBullet ? (1 / 6) : 1;
         e.hits += damage;
@@ -4242,9 +4250,9 @@ function update(now) {
         const A = 12, B = 11;
         const r = Math.sqrt((localX / A) * (localX / A) + (localY / B) * (localY / B));
         if (r > 1) { localX /= r; localY /= r; }
-        // Epsilon: 15 * (1/3) er 4.9999... i double precision. Uden tolerance
-        // ville fjenden krave 16 MG-hits i stedet for 15.
-        if (e.hits >= 5 - 1e-9) {
+        // Epsilon: 18 * (1/6) kan lande paa 2.9999... i double precision. Uden
+        // tolerance ville fjenden krave 19 MG-hits i stedet for 18.
+        if (e.hits >= ENEMY_MAX_HITS - 1e-9) {
           // Doedelig akkumulering: dying-fasen starter. Tilfoej ekstra fire-
           // maerker for spredning af flammer over skroget.
           e.dying = true;
@@ -4271,7 +4279,7 @@ function update(now) {
           sfxImpactExplosion();
           sfxBurning(e.dyingDuration / 1000);
         } else {
-          const inFireTier = e.hits > 2;   // samme threshold som visuel tier
+          const inFireTier = e.hits > ENEMY_FIRE_TIER;   // samme threshold som visuel tier
           const tier = inFireTier ? 'fire' : 'crack';
           e.damageMarks.push({ localX, localY, tier, seed: Math.random() });
           if (lightBullet) {
@@ -4281,8 +4289,8 @@ function update(now) {
             if (inFireTier) sfxFireExplosion({ volume: 0.4 });
             else            sfxBulletMetal();
           } else {
-            // Raket: ricochet ved <=2 hits-aekvivalent, ellers impact-eksplosion.
-            if (e.hits <= 2) sfxRicochet();
+            // Raket: ricochet i crack-tier, ellers impact-eksplosion.
+            if (e.hits <= ENEMY_FIRE_TIER) sfxRicochet();
             else             sfxImpactExplosion();
           }
         }
@@ -4403,7 +4411,7 @@ function updateLaser(firing, dtSec) {
     hitE.hits += dps * dtSec;
     if (Math.random() < 0.4) spawnSpark(laserBeam.x2, laserBeam.y2, ang + Math.PI);
     startLaserWeld();   // let svejse-syden mens strålen rammer
-    if (hitE.hits >= 5 - 1e-9) laserKill(hitE);
+    if (hitE.hits >= ENEMY_MAX_HITS - 1e-9) laserKill(hitE);
   } else {
     laserBeam.x2 = ox + dx * LASER_RANGE;
     laserBeam.y2 = oy + dy * LASER_RANGE;
@@ -4514,7 +4522,7 @@ function applyEnemyHit(e, worldNormalX, worldNormalY) {
   // worldNormalX/Y: enhedsvektor fra fjende mod player. Contact paa fjendens
   // hull er i modsat retning fra fjenden's center.
   e.hits++;
-  if (e.hits >= 5) {
+  if (e.hits >= ENEMY_MAX_HITS) {
     e.dying = true;
     e.dyingT = 0;
     const A = 12, B = 11;
@@ -4539,7 +4547,7 @@ function applyEnemyHit(e, worldNormalX, worldNormalY) {
   const A = 12, B = 11;
   const r = Math.sqrt((localX / A) * (localX / A) + (localY / B) * (localY / B));
   if (r > 1) { localX /= r; localY /= r; }
-  const tier = (e.hits <= 2) ? 'crack' : 'fire';
+  const tier = (e.hits <= ENEMY_FIRE_TIER) ? 'crack' : 'fire';
   e.damageMarks.push({ localX, localY, tier, seed: Math.random() });
 }
 
