@@ -289,7 +289,7 @@
   #phase {
     position: fixed;
     /* rykket ned for at gøre plads til pilot-portrættet i top-højre */
-    top: 295px;
+    top: 120px;
     right: 20px;
     color: rgba(150, 180, 220, 0.4);
     font-size: 11px;
@@ -302,12 +302,14 @@
     font-size: 14px;
     margin-bottom: 2px;
   }
-  /* Pilot-portræt — Brian skifter humør efter kampens gang */
+  /* Pilot-portræt — Brian skifter humør efter kampens gang.
+     Krympet til 25% af foer (140x245 -> 35x61): fuld stoerrelse aad over en
+     tredjedel af en telefonskaerm. Tekst skaleret med saa den ikke overloeber. */
   #portrait {
     position: fixed;
     top: 20px;
     right: 20px;
-    width: 140px;
+    width: 35px;
     pointer-events: none;
     font-family: 'Segoe UI', sans-serif;
     text-align: center;
@@ -315,13 +317,17 @@
   }
   #portrait .label {
     color: rgba(150, 180, 220, 0.5);
-    font-size: 10px;
-    letter-spacing: 2px;
-    margin-bottom: 4px;
+    font-size: 7px;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+    /* teksten er bredere end den 35px smalle ramme — giv den en bredere,
+       centreret tekst-seng saa den ikke klippes af containeren */
+    margin-left: -25px;
+    margin-right: -25px;
   }
   #portrait .frame {
-    width: 140px;
-    height: 245px;
+    width: 35px;
+    height: 61px;
     border: 1px solid rgba(120, 150, 200, 0.35);
     background: rgba(10, 20, 35, 0.4);
     box-shadow: 0 0 12px rgba(80, 130, 200, 0.25);
@@ -337,10 +343,12 @@
     image-rendering: crisp-edges;
   }
   #portrait .mood {
-    margin-top: 4px;
+    margin-top: 2px;
     color: rgba(220, 235, 255, 0.7);
-    font-size: 11px;
-    letter-spacing: 2px;
+    font-size: 7px;
+    letter-spacing: 0.5px;
+    margin-left: -25px;   /* samme brede tekst-seng som .label */
+    margin-right: -25px;
   }
   /* Under aktiv kamp gøres portrættet halvt gennemsigtigt (sat via body.combat
      i loop'en) — samme stil som mobil-udgaven — saa rumskibet kan ses bagved. */
@@ -1027,22 +1035,17 @@
     #victory .title  { font-size: 34px; letter-spacing: 7px; }
     #pauseScreen .title { font-size: 36px; letter-spacing: 8px; }
 
-    /* Pilot-portraet: halv stoerrelse + halvt gennemsigtigt */
+    /* Pilot-portraet: arver base-stoerrelsen (35x61) — halvt gennemsigtigt */
     #portrait {
-      width: 70px;
       top: 12px;
       right: 12px;
       opacity: 0.5;
     }
     #portrait .label { display: none; }   /* fjern "PILOT · BRIAN" for mindre rod */
-    #portrait .frame {
-      width: 70px;
-      height: 122px;
-    }
-    #portrait .mood { font-size: 9px; letter-spacing: 1px; margin-top: 3px; }
+    #portrait .mood { font-size: 7px; letter-spacing: 0.5px; margin-top: 2px; }
 
     /* Phase-label kan rykke op naar portraettet er mindre */
-    #phase { top: 150px; }
+    #phase { top: 95px; }
 
     /* Shop: skaler tekst saa den ikke flyder ud til margenerne paa smalle skaerme */
     #shop { padding: 24px 16px 32px; }
