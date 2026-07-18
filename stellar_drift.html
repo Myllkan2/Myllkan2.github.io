@@ -2855,7 +2855,10 @@ const SHIP_TYPES = {
 };
 // Hvilket skib spilleren bruger naeste gang en simulation starter. LAUNCH i
 // shoppen overskriver denne med det koebte skib.
-let equippedShip = 'default';
+// Tutorialen flyver OGSAA Drifteren (STARTER_SHIP): foer fløj man 'default' i
+// fuld stoerrelse og krympede saa til det halve efter shoppen — forvirrende.
+// Samme skib hele vejen = samme foelelse (0.5 scale, 5 hits, +30% accel).
+let equippedShip = STARTER_SHIP;
 // Tilsvarende for vaaben: 'default' og 'weapon-rl' bruger den eksisterende
 // raket-mekanik; 'weapon-mg' aktiverer maskingevaer. Trin 4 vil differentiere
 // 'weapon-rl' fra default.
@@ -2980,8 +2983,11 @@ function addActiveWeapon(id) {
 // HUD: ét vaaben -> fuldt navn; flere -> korte labels med " + ". Groen naar man
 // har samlet ekstra op (mere end base-vaabnet).
 function refreshWeaponHUD() {
-  weaponBlockEl.classList.toggle('visible', weaponHudActive);
-  heatBlockEl.classList.toggle('visible', weaponHudActive && activeWeapons.includes('weapon-mg'));
+  // Tutorial (weaponHudActive=false): HUD'en dukker alligevel op naar man har
+  // samlet et ekstra vaaben op — ellers ville tutorial-drops vaere usynlige.
+  const show = weaponHudActive || activeWeapons.length > 1;
+  weaponBlockEl.classList.toggle('visible', show);
+  heatBlockEl.classList.toggle('visible', show && activeWeapons.includes('weapon-mg'));
   if (!activeWeapons.length) { weaponNameEl.textContent = ''; return; }
   weaponNameEl.textContent = activeWeapons.length === 1
     ? (WEAPON_NAMES[activeWeapons[0]] || activeWeapons[0])
@@ -2989,10 +2995,10 @@ function refreshWeaponHUD() {
   weaponNameEl.classList.toggle('boosted', activeWeapons.length > 1);
 }
 
-// Drop loot fra en draebt fjende (kun post-graduation). Moent altid; vaaben dropper
+// Drop loot fra en draebt fjende — ogsaa i tutorialen, saa pickups/power-ups
+// laeres FOER de betyder noget i rejse-kampene. Moent altid; vaaben dropper
 // GARANTERET ved missionens foerste kill, derefter med WEAPON_DROP_CHANCE.
 function spawnDrops(x, y, vx, vy) {
-  if (!hasGraduated) return;
   spawnPickup(x, y, vx, vy, 'coin', null);
   const guaranteed = !firstKillWeaponDropped;
   if (guaranteed || Math.random() < WEAPON_DROP_CHANCE) {
