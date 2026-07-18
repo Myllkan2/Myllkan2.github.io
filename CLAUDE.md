@@ -27,7 +27,10 @@ Tingene er *langsomme med vilje*. Accelerationen er 60 px/s², topfart 220, kano
 Dette er spillets identitet. Tre koblede men separate kontroller giver dybden. Lad være med at koble dem sammen igen.
 
 ### Realistisk fysik med en blød kappe
-Ingen friktion — momentum er ægte. Eneste tilgivelse er en blød `MAX_SPEED`-cap og skærmwrap (Asteroids-stil). Glid og inerti er feature, ikke bug.
+Ingen friktion — momentum er ægte. Eneste tilgivelse er en blød `MAX_SPEED`-cap og verdens torus-wrap (Asteroids-stil, men i verdens skala — se næste afsnit). Glid og inerti er feature, ikke bug.
+
+### Kamera med lookahead, torus-verden (phase 3)
+Verden er `WORLD_SCREENS` (3×3) skærme stor og wrapper som en torus — men *relativt til spilleren*: spilleren flyver frit i ubegrænsede koordinater, og alle andre entiteter normaliseres hver frame ind i vinduet ±½ verden omkring skibet (`wrapRelative`). Det gør at al delta-matematik (kollisioner, sigte, magnet) virker uden søm-specialtilfælde. Kameraet følger skibet med velocity-lookahead (`CAM_LOOKAHEAD`, clampet så skibet aldrig ryger ud til skærmkanten) og eksponentiel udglatning. Stjernelagene + Milky Way tegnes med parallax-offset og tiler uendeligt — det er kameraets bevægelse gennem parallaxen der sælger følelsen af rum. HUD'en er DOM og upåvirket af kameraet.
 
 ### Visuel rigdom gennem lag, ikke sprites
 Vi tegner detaljer manuelt: gradients til skrog, panellinier, vents, monteringsringe, glødende flammer, additivt blendede stjerner, en baked Milky Way med støvbånd og nebula-glød. `globalCompositeOperation = 'lighter'` er vores ven. Statiske ting (Milky Way) prerenderes til en offscreen canvas — dynamiske ting tegnes per frame.

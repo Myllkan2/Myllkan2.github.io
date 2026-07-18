@@ -2304,7 +2304,12 @@ window.addEventListener('resize', resize);
 // INPUT
 // ============================================================================
 const keys = {};
-const mouse = { x: 0, y: 0, down: false };
+const mouse = { x: 0, y: 0, down: false };   // raa SKAERM-koordinater
+// Sigtepunktet i WORLD-koordinater. Desktop: mus + kamera-offset hver frame
+// (saa taarnet foelger skaermpunktet mens kameraet glider). Touch: projiceres
+// fra aimsticket; beholder sidste punkt naar sticket slippes, saa taarnet
+// holder retningen i stedet for at svinge mod et daudt (0,0).
+const aim = { x: 0, y: 0 };
 
 window.addEventListener('keydown', e => {
   const isMovementKey = ['KeyW','KeyA','KeyS','KeyD','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code);
@@ -2510,7 +2515,7 @@ window.addEventListener('touchstart', e => {
 // --- Sigte-joystick (touch): MANUEL fyring. Mens man holder, foelger taarnet
 // retningen (sigte-feedback) — men der skydes IKKE. Hvert nyt tryk i en retning
 // affyrer ÉT skud (rakets 3-burst / ét MG-skud), og taarnet snapper til
-// tryk-retningen saa skuddet rammer praecis dér. mouse.x/y saettes hver frame i
+// tryk-retningen saa skuddet rammer praecis dér. aim.x/y saettes hver frame i
 // update-loopet ud fra skibets position, saa retningen er stabil mens man driver. ---
 const aimstick = { active: false, angle: 0, mag: 0 };
 const aimEl = document.getElementById('aimstick');
@@ -2637,11 +2642,13 @@ const STAR_LAYERS = 3;
 function generateStars() {
   stars.length = 0;
   const w = canvas.width, h = canvas.height;
+  // Stjernerne genereres i [0,w)x[0,h) og tegnes med parallax-offset modulo
+  // skaermen (drawStars) — feltet tiler uendeligt naar kameraet rejser.
   // Layer 1: tiny distant stars (many)
   for (let i = 0; i < 600; i++) {
     stars.push({
-      x: Math.random() * w * 1.5 - w * 0.25,
-      y: Math.random() * h * 1.5 - h * 0.25,
+      x: Math.random() * w,
+      y: Math.random() * h,
       size: Math.random() * 0.8 + 0.2,
       brightness: Math.random() * 0.5 + 0.2,
       layer: 0,
@@ -2653,8 +2660,8 @@ function generateStars() {
   // Layer 2: medium stars
   for (let i = 0; i < 200; i++) {
     stars.push({
-      x: Math.random() * w * 1.5 - w * 0.25,
-      y: Math.random() * h * 1.5 - h * 0.25,
+      x: Math.random() * w,
+      y: Math.random() * h,
       size: Math.random() * 1.5 + 0.6,
       brightness: Math.random() * 0.4 + 0.5,
       layer: 1,
@@ -2666,8 +2673,8 @@ function generateStars() {
   // Layer 3: bright foreground stars (few)
   for (let i = 0; i < 40; i++) {
     stars.push({
-      x: Math.random() * w * 1.5 - w * 0.25,
-      y: Math.random() * h * 1.5 - h * 0.25,
+      x: Math.random() * w,
+      y: Math.random() * h,
       size: Math.random() * 2 + 1.5,
       brightness: 0.9,
       layer: 2,
@@ -2691,7 +2698,7 @@ function generateMilkyWay() {
     const gauss = (r1 + r2 - 1);  // -1 to 1, biased to 0
     const y = cy + gauss * bandHeight * 0.5 + Math.sin(Math.random() * 10) * 20;
     milkyWayStars.push({
-      x: Math.random() * w * 1.5 - w * 0.25,
+      x: Math.random() * w,
       y: y + (Math.random() - 0.5) * 30,
       size: Math.random() * 0.6 + 0.2,
       brightness: (1 - Math.abs(gauss)) * 0.6 + 0.1,
@@ -2737,12 +2744,14 @@ function bakeMilkyWay() {
   mctx.fillRect(0, 0, w, h);
 
   // Dark dust lanes (subtractive feel via dark patches)
+  // Holdes vaek fra kanterne: canvas'et tiles nu af kameraet, og en ellipse
+  // klippet af kanten ville vise en haard soem mellem tiles.
   mctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
   for (let i = 0; i < 8; i++) {
-    const dx = Math.random() * w;
-    const dy = cy + (Math.random() - 0.5) * h * 0.2;
     const dw = 80 + Math.random() * 200;
     const dh = 10 + Math.random() * 25;
+    const dx = dw + Math.random() * Math.max(1, w - dw * 2);
+    const dy = cy + (Math.random() - 0.5) * h * 0.2;
     mctx.beginPath();
     mctx.ellipse(dx, dy, dw, dh, Math.random() * 0.4 - 0.2, 0, Math.PI * 2);
     mctx.fill();
@@ -2760,6 +2769,58 @@ function bakeMilkyWay() {
 }
 bakeMilkyWay();
 window.addEventListener('resize', () => setTimeout(bakeMilkyWay, 50));
+
+// ============================================================================
+// CAMERA + TORUS-VERDEN
+// ============================================================================
+// Verden er stoerre end skaermen: WORLD_SCREENS x skaermen i hver akse, og den
+// wrapper som en torus. I stedet for at wrappe alt i faste world-koordinater
+// wrapper vi alle entiteter RELATIVT til spilleren (wrapRelative): spilleren
+// flyver frit i ubegraensede koordinater, og alt andet normaliseres hver frame
+// ind i vinduet [player - W/2, player + W/2). Det betyder at al eksisterende
+// delta-matematik (kollisioner, AI-sigte, magnet) virker uaendret — intet kan
+// vaere laengere vaek end en halv verden, saa der er ingen "soem" at krydse.
+const WORLD_SCREENS = 3;
+
+// Kameraet foelger skibet med velocity-lookahead: sigtepunktet ligger foran
+// skibet i fartretningen, saa man ser derhen man driver. 0.7s lookahead ved
+// MAX_SPEED 220 = ~150 px — men clamp'et til en andel af skaermen saa skibet
+// aldrig skubbes helt ud til kanten paa smalle telefonskaerme.
+const CAM_LOOKAHEAD = 0.7;     // sekunder frem i fartretningen
+const CAM_FOLLOW_RATE = 3.5;   // 1/s — hoejere = strammere foelge, lavere = mere glid
+const camera = { cx: 0, cy: 0, x: 0, y: 0 };   // cx/cy = centrum, x/y = top-venstre
+
+function snapCamera() {
+  camera.cx = player.x;
+  camera.cy = player.y;
+  camera.x = camera.cx - canvas.width / 2;
+  camera.y = camera.cy - canvas.height / 2;
+}
+
+function updateCamera(dtSec) {
+  const lookMax = Math.min(canvas.width, canvas.height) * 0.22;
+  let lx = player.vx * CAM_LOOKAHEAD, ly = player.vy * CAM_LOOKAHEAD;
+  const lm = Math.hypot(lx, ly);
+  if (lm > lookMax) { lx = (lx / lm) * lookMax; ly = (ly / lm) * lookMax; }
+  // Eksponentiel udglatning der er framerate-uafhaengig (samme glid ved 30/60/120 fps).
+  // Eksponentiel foelger af et bevaegende maal halter konstant v/rate bagefter
+  // (63 px ved topfart) — det ville aede det meste af lookahead'en paa en
+  // telefon. Kompensér ved at laegge v/rate til maalet, saa steady-state-
+  // offsettet er praecis lookahead'en.
+  const ease = 1 - Math.exp(-CAM_FOLLOW_RATE * dtSec);
+  camera.cx += (player.x + lx + player.vx / CAM_FOLLOW_RATE - camera.cx) * ease;
+  camera.cy += (player.y + ly + player.vy / CAM_FOLLOW_RATE - camera.cy) * ease;
+  camera.x = camera.cx - canvas.width / 2;
+  camera.y = camera.cy - canvas.height / 2;
+}
+
+// Wrap en entitet ind i torus-vinduet centreret paa spilleren. Kaldes efter
+// entitetens positions-opdatering — erstatter de gamle skaermkant-wraps.
+function wrapRelative(o) {
+  const W = canvas.width * WORLD_SCREENS, H = canvas.height * WORLD_SCREENS;
+  o.x -= Math.round((o.x - player.x) / W) * W;
+  o.y -= Math.round((o.y - player.y) / H) * H;
+}
 
 // ============================================================================
 // GAME OBJECTS
@@ -2968,10 +3029,7 @@ function updatePickups(dtSec, dt) {
     p.x += p.vx * dtSec;
     p.y += p.vy * dtSec;
     p.spin += dtSec * 3;
-    if (p.x < -20) p.x = canvas.width + 20;
-    if (p.x > canvas.width + 20) p.x = -20;
-    if (p.y < -20) p.y = canvas.height + 20;
-    if (p.y > canvas.height + 20) p.y = -20;
+    wrapRelative(p);
     if (collectable) {
       const rr = player.radius * WORLD_SCALE + p.radius + 8;   // gavmild opsamlings-radius
       if (dist2 < rr * rr) {
@@ -3152,9 +3210,12 @@ function spawnPlayer() {
   player.scale = cfg.scale;
   player.radius = cfg.radius;
   player.maxHits = cfg.maxHits;
+  // Startpunkt i verden er arbitraert (kameraet definerer hvad man ser) —
+  // skaermcentrum genbruges som world-origin og kameraet snappes dertil.
   player.x = canvas.width / 2;
   player.y = canvas.height / 2;
   player.vx = 0; player.vy = 0;
+  snapCamera();
   player.hits = 0;
   player.alive = true;
   player.dying = false;     // 1.5s mellem sidste hit og final explosion
@@ -3796,13 +3857,15 @@ let gameTime = 0;
 let score = 0;
 
 function spawnEnemy() {
-  // Spawn off-screen edge
+  // Spawn lige uden for kameraets view (verden er stoerre end skaermen nu —
+  // spawn ved world-kanten ville vaere usynligt langt vaek).
   const side = Math.floor(Math.random() * 4);
+  const cx = camera.x, cy = camera.y, w = canvas.width, h = canvas.height;
   let x, y;
-  if (side === 0) { x = -50; y = Math.random() * canvas.height; }
-  else if (side === 1) { x = canvas.width + 50; y = Math.random() * canvas.height; }
-  else if (side === 2) { x = Math.random() * canvas.width; y = -50; }
-  else { x = Math.random() * canvas.width; y = canvas.height + 50; }
+  if (side === 0) { x = cx - 50; y = cy + Math.random() * h; }
+  else if (side === 1) { x = cx + w + 50; y = cy + Math.random() * h; }
+  else if (side === 2) { x = cx + Math.random() * w; y = cy - 50; }
+  else { x = cx + Math.random() * w; y = cy + h + 50; }
 
   enemies.push({
     x: x, y: y,
@@ -3855,13 +3918,10 @@ function update(now) {
       const fadeProgress = Math.min(1, player.dyingT / 1500);
       gameMusicEl.volume = 0.55 * (1 - fadeProgress);
     }
-    // Inerti i rummet: skibet driver videre med sin nuvaerende fart under dying.
+    // Inerti i rummet: skibet driver videre med sin nuvaerende fart under dying
+    // — kameraet foelger driften, saa ingen kant-wrap noedvendig.
     player.x += player.vx * dtSec;
     player.y += player.vy * dtSec;
-    if (player.x < -20) player.x = canvas.width + 20;
-    if (player.x > canvas.width + 20) player.x = -20;
-    if (player.y < -20) player.y = canvas.height + 20;
-    if (player.y > canvas.height + 20) player.y = -20;
     if (player.dyingT >= 1500) {
       player.alive = false;
       player.dying = false;
@@ -3883,15 +3943,20 @@ function update(now) {
       stopThrust();
     }
   } else if (player.alive) {
-  // --- Player aiming: turret rotates fast toward mouse, ship stays fixed ---
-  // Sigte-joystick (touch): projicér et "mus"-punkt i skub-retningen ud fra
+  // --- Player aiming: turret rotates fast toward aim point, ship stays fixed ---
+  // Sigte-joystick (touch): projicér sigtepunktet i skub-retningen ud fra
   // skibets aktuelle position, saa retningen er stabil mens skibet driver.
+  // Desktop: musen er i skaerm-koordinater — kameraets offset laegges til saa
+  // taarnet sigter paa det punkt i VERDEN som musen svaever over.
   if (aimstick.active && aimstick.mag > 0) {
-    mouse.x = player.x + Math.cos(aimstick.angle) * 600;
-    mouse.y = player.y + Math.sin(aimstick.angle) * 600;
+    aim.x = player.x + Math.cos(aimstick.angle) * 600;
+    aim.y = player.y + Math.sin(aimstick.angle) * 600;
+  } else if (!touchModeOn) {
+    aim.x = camera.x + mouse.x;
+    aim.y = camera.y + mouse.y;
   }
-  const dx = mouse.x - player.x;
-  const dy = mouse.y - player.y;
+  const dx = aim.x - player.x;
+  const dy = aim.y - player.y;
   const targetTurretAngle = Math.atan2(dy, dx);
   // Smoothly rotate turret toward mouse - fast but not instant
   let tDiff = targetTurretAngle - player.turretAngle;
@@ -3971,12 +4036,8 @@ function update(now) {
 
   player.x += player.vx * dtSec;
   player.y += player.vy * dtSec;
-
-  // Wrap around screen edges (Asteroids style)
-  if (player.x < -20) player.x = canvas.width + 20;
-  if (player.x > canvas.width + 20) player.x = -20;
-  if (player.y < -20) player.y = canvas.height + 20;
-  if (player.y > canvas.height + 20) player.y = -20;
+  // Ingen kant-wrap laengere: spilleren flyver frit i ubegraensede koordinater,
+  // kameraet foelger, og resten af verden wrapper relativt (wrapRelative).
 
   // --- Firing ---
   // Vaaben AKKUMULERES (pickups): base + opsamlede fyrer SIDELOEBENDE, hvert med
@@ -4043,6 +4104,9 @@ function update(now) {
   touchFireRequest = false;
   }  // end: dying / alive dispatch
 
+  // --- Kamera: foelg skibet med lookahead (ogsaa under dying-drift) ---
+  updateCamera(dtSec);
+
   // --- Tutorial-fremdrift (foerste mission) ---
   updateTutorial(dt);
 
@@ -4066,7 +4130,11 @@ function update(now) {
     b.x += b.vx * dtSec;
     b.y += b.vy * dtSec;
     b.life -= dt;
-    if (b.life <= 0 || b.x < -20 || b.x > canvas.width + 20 || b.y < -20 || b.y > canvas.height + 20) {
+    // Cull ved en halv verden fra spilleren (torussens soem) — kugler wrapper
+    // ikke; de doer dér i stedet for at dukke op fra den modsatte side.
+    if (b.life <= 0 ||
+        Math.abs(b.x - player.x) > canvas.width * WORLD_SCREENS / 2 ||
+        Math.abs(b.y - player.y) > canvas.height * WORLD_SCREENS / 2) {
       bullets.splice(i, 1);
     }
   }
@@ -4090,7 +4158,9 @@ function update(now) {
     b.x += b.vx * dtSec;
     b.y += b.vy * dtSec;
     b.life -= dt;
-    if (b.life <= 0 || b.x < -50 || b.x > canvas.width + 50 || b.y < -50 || b.y > canvas.height + 50) {
+    if (b.life <= 0 ||
+        Math.abs(b.x - player.x) > canvas.width * WORLD_SCREENS / 2 ||
+        Math.abs(b.y - player.y) > canvas.height * WORLD_SCREENS / 2) {
       enemyBullets.splice(i, 1);
     } else if (player.alive && !ambushWon) {
       // Impact paa skroget?
@@ -4237,18 +4307,15 @@ function update(now) {
       }
       e.x += e.vx * dtSec;
       e.y += e.vy * dtSec;
-      if (e.x < -50) e.x = canvas.width + 50;
-      if (e.x > canvas.width + 50) e.x = -50;
-      if (e.y < -50) e.y = canvas.height + 50;
-      if (e.y > canvas.height + 50) e.y = -50;
+      wrapRelative(e);
       continue;  // ingen AI, ingen affyring, ingen kollision under dying
     }
 
-    // Ambush-win: retreat-mode. Skibet thruster udad fra skaermens centrum,
-    // skyder ikke, kolliderer ikke, og despawner naar det er off-screen.
+    // Ambush-win: retreat-mode. Skibet thruster udad fra KAMERAETS centrum,
+    // skyder ikke, kolliderer ikke, og despawner naar det er ude af syne.
     if (ambushWon) {
-      const dxC = e.x - canvas.width / 2;
-      const dyC = e.y - canvas.height / 2;
+      const dxC = e.x - camera.cx;
+      const dyC = e.y - camera.cy;
       // Hvis vi er meget taet paa centrum, behold tidligere retning saa skibet
       // ikke flipper rundt unødigt.
       if (dxC * dxC + dyC * dyC > 100) e.targetAngle = Math.atan2(dyC, dxC);
@@ -4269,7 +4336,9 @@ function update(now) {
       e.x += e.vx * dtSec;
       e.y += e.vy * dtSec;
       // Ingen wrap under retreat — skibet skal forsvinde, ikke komme tilbage.
-      if (e.x < -80 || e.x > canvas.width + 80 || e.y < -80 || e.y > canvas.height + 80) {
+      // "Off-screen" maales mod kameraets view, ikke world-koordinater.
+      if (e.x < camera.x - 80 || e.x > camera.x + canvas.width + 80 ||
+          e.y < camera.y - 80 || e.y > camera.y + canvas.height + 80) {
         enemies.splice(i, 1);
       }
       continue;
@@ -4318,11 +4387,8 @@ function update(now) {
     e.x += e.vx * dtSec;
     e.y += e.vy * dtSec;
 
-    // Wrap
-    if (e.x < -50) e.x = canvas.width + 50;
-    if (e.x > canvas.width + 50) e.x = -50;
-    if (e.y < -50) e.y = canvas.height + 50;
-    if (e.y > canvas.height + 50) e.y = -50;
+    // Wrap (torus relativt til spilleren)
+    wrapRelative(e);
 
     // Fire heavy projectile occasionally
     e.fireCooldown -= dt;
@@ -4872,6 +4938,12 @@ function spawnExplosion(x, y, projectileAngle) {
 // ============================================================================
 // RENDER
 // ============================================================================
+// Parallax-faktorer: hvor meget hvert baggrundslag flytter sig ift. kameraet.
+// Smaa tal = langt vaek. Naere stjerner (layer 2) streamer ved 30% af skibets
+// fart — det er dét der saelger foelelsen af at rejse gennem rummet.
+const MW_PARALLAX = 0.04;
+const STAR_PARALLAX = [0.05, 0.15, 0.30];
+
 function render() {
   const w = canvas.width, h = canvas.height;
 
@@ -4879,11 +4951,24 @@ function render() {
   ctx.fillStyle = '#000208';
   ctx.fillRect(0, 0, w, h);
 
-  // Draw baked Milky Way
-  if (milkyWayCanvas) ctx.drawImage(milkyWayCanvas, 0, 0);
+  // Baked Milky Way: tegnes med svag parallax, tiled 2x2 saa den daekker
+  // skaermen uanset offset (kameraet kan rejse ubegraenset langt).
+  if (milkyWayCanvas) {
+    const ox = -(((camera.x * MW_PARALLAX) % w + w) % w);
+    const oy = -(((camera.y * MW_PARALLAX) % h + h) % h);
+    ctx.drawImage(milkyWayCanvas, ox, oy);
+    ctx.drawImage(milkyWayCanvas, ox + w, oy);
+    ctx.drawImage(milkyWayCanvas, ox, oy + h);
+    ctx.drawImage(milkyWayCanvas, ox + w, oy + h);
+  }
 
   // Draw twinkling foreground stars
   drawStars();
+
+  // Alt i verden tegnes i world-koordinater under kameraets transform.
+  // HUD'en er DOM-elementer og paavirkes ikke.
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
 
   // Pickups (moenter + vaaben-drops) — under skib/projektiler saa de ligger "paa gulvet"
   drawPickups();
@@ -4908,24 +4993,32 @@ function render() {
 
   // Impact debris (on top so explosions read clearly against the hull)
   drawParticles();
+
+  ctx.restore();
 }
 
 function drawStars() {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
+  const w = canvas.width, h = canvas.height;
   for (const s of stars) {
     s.twinkle += s.twinkleSpeed;
     const tw = 0.7 + Math.sin(s.twinkle) * 0.3;
     const brightness = s.brightness * tw;
+    // Parallax pr. lag: skaerm-position = stjerne minus kamera*faktor, modulo
+    // skaermen saa feltet tiler uendeligt i alle retninger.
+    const f = STAR_PARALLAX[s.layer];
+    const sx = ((s.x - camera.x * f) % w + w) % w;
+    const sy = ((s.y - camera.y * f) % h + h) % h;
     ctx.fillStyle = `hsla(${s.hue}, 70%, 90%, ${brightness})`;
     ctx.beginPath();
-    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    ctx.arc(sx, sy, s.size, 0, Math.PI * 2);
     ctx.fill();
     // Add a glow for the brightest stars
     if (s.layer === 2 && brightness > 0.7) {
       ctx.fillStyle = `hsla(${s.hue}, 70%, 90%, ${brightness * 0.15})`;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, s.size * 3, 0, Math.PI * 2);
+      ctx.arc(sx, sy, s.size * 3, 0, Math.PI * 2);
       ctx.fill();
     }
   }
