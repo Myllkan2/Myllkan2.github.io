@@ -160,7 +160,7 @@
      midt i synsfeltet og daekkede kampen. Topbaandet er uden for flyvebanen. */
   #tutorial {
     position: fixed;
-    top: 82px;   /* lige under level-progress-baren (68px + 7px + kant) */
+    top: 96px;   /* under level-progress-baren + dens LEVEL PROGRESS-tekst */
     left: 50%;
     transform: translateX(-50%);
     text-align: center;
@@ -437,6 +437,16 @@
     background: linear-gradient(90deg, rgba(255, 190, 100, 0.9), rgba(255, 230, 160, 0.95));
     box-shadow: 0 0 8px rgba(255, 200, 110, 0.55);
     transition: width 0.25s ease;
+  }
+  #legProgressLabel {
+    position: absolute;
+    top: 9px;             /* lige under baren (7px + kant) */
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 8px;
+    letter-spacing: 3px;
+    color: rgba(150, 180, 220, 0.6);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
   }
   #pauseBtn:hover { background: rgba(40, 60, 100, 0.6); border-color: rgba(180, 210, 255, 0.6); }
   #pauseBtn .bar {
@@ -1242,7 +1252,7 @@
 </button>
 <!-- Level-progress: fyldes med kills paa det aktuelle stop. Fuld bar = piraterne
      bryder af og flygter (loot-gracen holder den fulde bar synlig imens). -->
-<div id="legProgress"><div id="legProgressFill"></div></div>
+<div id="legProgress"><div id="legProgressFill"></div><div id="legProgressLabel">LEVEL PROGRESS</div></div>
 <div id="pauseScreen">
   <div class="title">PAUSED</div>
   <div class="prompt">PRESS ANY KEY OR TAP TO RESUME</div>
@@ -1699,7 +1709,7 @@ let ambushWon = false;
 // Loot-grace: naar kill-maalet naas flygter piraterne MED DET SAMME (ambushWon),
 // men win-overlayet venter LOOT_GRACE_MS. I det vindue beholder spilleren
 // styringen og kan stoevsuge naerliggende moenter op, foer skaermen laases.
-const LOOT_GRACE_MS = 3000;
+const LOOT_GRACE_MS = 5000;   // var 3000 — spillerne skal kunne naa moenterne
 let lootGraceActive = false;
 let lootGraceUntil = 0;
 // Input-lockout: forhindrer at en tast under retreat-sekvensen straks lukker
