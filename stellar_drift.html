@@ -357,7 +357,7 @@
      i loop'en) — samme stil som mobil-udgaven — saa rumskibet kan ses bagved. */
   #portrait { transition: opacity 0.4s ease; }
   body.combat #portrait { opacity: 0.5; }
-  #gameOver, #titleScreen, #victory, #cutscene, #ambushWin, #familyCutscene, #homeEnding, #demoEnd, #pauseScreen {
+  #gameOver, #titleScreen, #victory, #cutscene, #ambushWin, #familyCutscene, #homeEnding, #wifeNote, #demoEnd, #pauseScreen {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     display: flex;
@@ -680,6 +680,62 @@
     letter-spacing: 2px;
   }
   #homeEnding .prompt {
+    font-size: 12px;
+    letter-spacing: 4px;
+    color: rgba(190, 215, 245, 0.8);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    animation: gov-blink 1.5s ease-in-out infinite;
+  }
+  /* Sedlen: fundet i ruinerne — samme BrianHome-baggrund som HOME-endingen (han
+     staar stadig i huset). Selve papiret er en lys, haandskreven lap der bevidst
+     bryder med alle de andre koelige hologram-blaa overlays: det her er det
+     eneste varme, menneskelige objekt i hele ruinen. */
+  #wifeNote {
+    background:
+      linear-gradient(rgba(2, 6, 14, 0.84), rgba(2, 6, 14, 0.6) 40%, rgba(2, 6, 14, 0.86)),
+      url('BrianHome.jpeg') center / cover no-repeat;
+  }
+  #wifeNote.visible {
+    opacity: 1;
+    transition: opacity 1.2s ease-in 0.4s;
+  }
+  #wifeNote .subtitle {
+    font-size: 12px;
+    letter-spacing: 8px;
+    color: rgba(150, 180, 220, 0.65);
+    margin-bottom: 26px;
+  }
+  #wifeNote .paper {
+    background: linear-gradient(160deg, #f2ecd9, #ded4b9);
+    color: #2a2118;
+    /* Haandskrift-stakken daekker Windows/Android/iOS; generisk cursive som net. */
+    font-family: 'Segoe Script', 'Bradley Hand', 'Comic Sans MS', cursive;
+    font-size: clamp(15px, 4.2vw, 20px);
+    line-height: 1.8;
+    padding: 26px 38px;
+    max-width: min(430px, 84vw);
+    transform: rotate(-2deg);    /* smidt/fundet, ikke praesenteret */
+    border-radius: 2px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.75);
+    margin-bottom: 32px;
+  }
+  #wifeNote .story {
+    font-size: 15px;
+    letter-spacing: 1.5px;
+    line-height: 1.75;
+    color: rgba(232, 240, 250, 0.94);
+    max-width: 680px;
+    text-align: center;
+    margin-bottom: 38px;
+    padding: 0 40px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 14px rgba(0, 0, 0, 0.65);
+  }
+  #wifeNote .story strong {
+    color: rgba(210, 230, 255, 0.96);
+    font-weight: 400;
+    letter-spacing: 2px;
+  }
+  #wifeNote .prompt {
     font-size: 12px;
     letter-spacing: 4px;
     color: rgba(190, 215, 245, 0.8);
@@ -1339,10 +1395,30 @@
   <div class="story">
     The last engine spools down. Home — or what is left of it.<br><br>
     The roof torn open to the stars. The rooms gutted, cold, still smoking. Brian moves through the wreckage in silence, sorrowfully turning over the old things — the family portrait still hanging on the broken wall, the shattered china, the little things they touched every day — searching for any sign, any trace, of where his wife and daughter so suddenly vanished.<br><br>
-    Whoever did this left nothing behind. Except the certainty that <strong>someone</strong> did.<br><br>
-    <strong>This isn't over, Brian.</strong>
+    Whoever did this left nothing behind. Except — there, pinned under the shattered china — a fold of paper.<br><br>
+    <strong>Her handwriting, Brian.</strong>
   </div>
-  <div class="prompt">TO BE CONTINUED &nbsp;—&nbsp; PRESS ANY KEY</div>
+  <div class="prompt">PRESS ANY KEY</div>
+</div>
+
+<!-- Sedlen: fundet i ruinerne efter HOME-endingen. Konens haandskrevne besked
+     (papir-lappen) + forklarende tekst nedenunder om hvem Kurtarerne er.
+     Herfra saettes kursen mod Betelgeuse (BETELGEUSE_LEGS, 10 stop). -->
+<div id="wifeNote">
+  <div class="subtitle">FOUND IN THE WRECKAGE</div>
+  <div class="paper">
+    Brian &mdash;<br>
+    Kurtar ships. Too many.<br>
+    They are taking us to Betelgeuse.<br>
+    We are alive. Stay alive too.<br>
+    Find us.
+  </div>
+  <div class="story">
+    The <strong>Kurtars</strong>. Slave traders &mdash; they trawl the burnt-out systems and sell what they take in the flesh markets under Betelgeuse's dying red light.<br><br>
+    Half a galaxy from here. It doesn't matter.<br><br>
+    They're alive, <strong>Brian</strong>. Set course for Betelgeuse.
+  </div>
+  <div class="prompt">PRESS ANY KEY TO SET COURSE</div>
 </div>
 
 <!-- Demo-slut: vises efter HOME-endingen. Historien pauser her; spilleren kan
@@ -1351,8 +1427,8 @@
   <div class="title">END OF DEMO</div>
   <div class="subtitle">STELLAR DRIFT &middot; CHAPTER ONE</div>
   <div class="story">
-    This is where Brian's story pauses &mdash; for now.<br><br>
-    The search for his wife and daughter continues in a coming chapter. Thank you for playing the demo &mdash; your feedback shapes what happens next.<br><br>
+    Betelgeuse fills the sky &mdash; and somewhere beneath that dying red light, the Kurtar markets hold everything Brian loves.<br><br>
+    This is where his story pauses &mdash; for now. The rescue continues in a coming chapter. Thank you for playing the demo &mdash; your feedback shapes what happens next.<br><br>
     Until then, the trade lanes are still crawling with pirates&hellip; and you still have a ship.
   </div>
   <a class="rate-btn" href="https://play.google.com/store/apps/details?id=com.myllkan.stellardrift"
@@ -1401,6 +1477,7 @@ const familyCutsceneVideo = document.getElementById('familyCutsceneVideo');
 const familyCutsceneSubtitleEl = document.getElementById('familyCutsceneSubtitle');
 const familyCutsceneSkipBtn = document.getElementById('familyCutsceneSkipBtn');
 const homeEndingEl = document.getElementById('homeEnding');
+const wifeNoteEl = document.getElementById('wifeNote');
 const demoEndEl = document.getElementById('demoEnd');
 const cutsceneSubtitleEl = cutsceneEl.querySelector('.subtitle');
 const cutsceneStoryEl = cutsceneEl.querySelector('.story');
@@ -1506,6 +1583,12 @@ const ENEMY_MAX_HITS  = 3;
 // crack. Var 2 da max var 5 (de sidste to trin braendte) — skaleret med saa
 // sidste trin foer doeden stadig braender.
 const ENEMY_FIRE_TIER = 1;
+// Kurtar-eskorter (Betelgeuse-rejsen, fra level 5): 50% stoerre skrog og 50%
+// flere hitpoints end standard-hulls. Andelen pr. stop styres af leg'ets
+// heavyChance. Fire-tieren skaleres med, saa ilden stadig starter ved samme
+// RELATIVE skade — ellers ville en eskorte braende det meste af kampen.
+const HEAVY_SCALE     = 1.5;
+const HEAVY_HITS_MULT = 1.5;
 
 // Weak Laser: hitscan-stråle (lysets hastighed). Svag i starten, men skaden
 // rampes op mens man HOLDER strålen paa en fjende — som en lup der skal holdes
@@ -1607,14 +1690,79 @@ const HOME_LEGS = [
          + "But the cartels know exactly where graduates run to. The whole pack has come to meet you at the doorstep — every hull they had left, thrown into one last gauntlet.<br><br>"
          + "One more time, <strong>Brian</strong>. Bring it home." }
 ];
+
+// ===== REJSEN TIL BETELGEUSE (post-HOME): 10 stop, stigende svaerhedsgrad =========
+// Efter HOME-endingen finder Brian konens seddel (wifeNote-overlayet) og saetter
+// kurs mod Betelgeuse — Kurtarernes slavemarked. Samme leg-mekanik som rejsen
+// hjem, bare laengere og haardere. Fra stop 5 faar legs et `heavyChance`-felt:
+// sandsynligheden for at en spawn er en Kurtar-eskorte (50% stoerre skrog, 50%
+// flere hitpoints — se spawnEnemy). Kurven ender ved 0.7, ikke 1.0, saa der
+// altid er lette hulls imellem til at variere kampens rytme.
+const BETELGEUSE_LEGS = [
+  { name: 'THE BURNT LANES', killTarget: 8, cap: 8, waveMin: 4, waveSpan: 3, gapMin: 9000, gapSpan: 5000,
+    story: "The house falls away behind you, the note folded over your heart. The Kurtar convoy is weeks gone — but a convoy that size leaves a trail: scorched relays, stripped freighters, drone pickets posted to cover the wake.<br><br>"
+         + "Cut through them, <strong>Brian</strong>. Every hull down is a mile closer to her." },
+  { name: 'KURTAR WAKE', killTarget: 9, cap: 8, waveMin: 4, waveSpan: 4, gapMin: 8500, gapSpan: 5000,
+    story: "Reactor dust, still warm. You're gaining on them.<br><br>"
+         + "But the pickets are thicker here — the Kurtars know something small and angry is following their wake, and they'd rather it didn't arrive.<br><br>"
+         + "Disappoint them, <strong>Brian</strong>." },
+  { name: 'THE SILENT RELAY', killTarget: 10, cap: 9, waveMin: 4, waveSpan: 4, gapMin: 8000, gapSpan: 4500,
+    story: "A deep-space comms relay, gutted and dark — the slavers strip every ear along their route so no one can call ahead.<br><br>"
+         + "They left more than silence behind. The wrecks around the relay light up as you pass: an ambush, patient and cold.<br><br>"
+         + "Fight through it, <strong>Brian</strong>." },
+  { name: 'GRAVEYARD DRIFT', killTarget: 11, cap: 9, waveMin: 5, waveSpan: 3, gapMin: 7500, gapSpan: 4500,
+    story: "A field of dead ships, drifting hull to hull — everyone who ever followed a Kurtar convoy this far and lost their nerve. Or their reactor.<br><br>"
+         + "Their drones nest in the wrecks like carrion birds.<br><br>"
+         + "Don't join the graveyard, <strong>Brian</strong>." },
+  { name: "THE SLAVERS' ROAD", killTarget: 12, cap: 9, waveMin: 5, waveSpan: 4, gapMin: 7000, gapSpan: 4000, heavyChance: 0.30,
+    story: "This is the Kurtars' own artery — the lane every slave convoy runs to Betelgeuse. And arteries have guards.<br><br>"
+         + "<strong>Escort hulls</strong>: half again the size of anything you've fought, and they soak up half again the punishment. Watch for the big silhouettes and keep your distance.<br><br>"
+         + "Steady aim, <strong>Brian</strong>." },
+  { name: 'IRON SHOAL', killTarget: 13, cap: 10, waveMin: 5, waveSpan: 4, gapMin: 6500, gapSpan: 4000, heavyChance: 0.35,
+    story: "A shoal of magnetized wreck-iron, dragged into the lane as a filter: anything alive that tries to pass gets funneled straight into the guns waiting behind it.<br><br>"
+         + "The escorts hold the narrow gaps.<br><br>"
+         + "Thread it, <strong>Brian</strong>." },
+  { name: 'THE CRIMSON SHALLOWS', killTarget: 14, cap: 10, waveMin: 5, waveSpan: 5, gapMin: 6000, gapSpan: 3500, heavyChance: 0.40,
+    story: "The void turns red. Betelgeuse is still a long burn away, but its light already stains every hull and every wreck the color of rust.<br><br>"
+         + "In the shallows of its glare, the Kurtars stop hiding. This is their sky.<br><br>"
+         + "Make it yours, <strong>Brian</strong>." },
+  { name: "RED GIANT'S REACH", killTarget: 15, cap: 10, waveMin: 6, waveSpan: 4, gapMin: 5500, gapSpan: 3500, heavyChance: 0.50,
+    story: "The star fills a tenth of the sky now, boiling and old. Everything here belongs to the Kurtars — the lanes, the relays, the patrols.<br><br>"
+         + "Half the hulls coming at you are escorts. They've stopped guarding the convoy. They're hunting you.<br><br>"
+         + "Let them come, <strong>Brian</strong>." },
+  { name: 'THE LAST GATE', killTarget: 16, cap: 11, waveMin: 6, waveSpan: 5, gapMin: 5000, gapSpan: 3000, heavyChance: 0.60,
+    story: "One jump from Betelgeuse: the toll gate where every slaver pays passage and every pursuer dies. No one has ever shot their way through it.<br><br>"
+         + "They're on the other side of it, <strong>Brian</strong>. Be the first." },
+  { name: 'BETELGEUSE APPROACH', killTarget: 18, cap: 12, waveMin: 6, waveSpan: 6, gapMin: 4500, gapSpan: 3000, heavyChance: 0.70,
+    story: "There it burns. <strong>Betelgeuse</strong> — and somewhere under that dying red light, the markets. Her. Your daughter.<br><br>"
+         + "The whole escort fleet stands between you and the surface, every hull the Kurtars can still throw.<br><br>"
+         + "One more time, <strong>Brian</strong>. All the way in." }
+];
+// Hele rejsen som ét indeks-rum: 0-2 = hjem, 3-12 = Betelgeuse. legIndex loeber
+// hen over begge; HOME-endingen + seddlen ligger som mellemspil ved graensen.
+const ALL_LEGS = HOME_LEGS.concat(BETELGEUSE_LEGS);
 let legIndex = 0;
-function currentLeg() { return HOME_LEGS[Math.min(legIndex, HOME_LEGS.length - 1)]; }
-function isFinalLeg() { return legIndex >= HOME_LEGS.length - 1; }
+function currentLeg() { return ALL_LEGS[Math.min(legIndex, ALL_LEGS.length - 1)]; }
+function isFinalLeg() { return legIndex >= ALL_LEGS.length - 1; }
+function isLastHomeLeg() { return legIndex === HOME_LEGS.length - 1; }
+// Fremdrifts-etiket til shop + cutscene: nummereres pr. delrejse (STOP x OF 3 /
+// LEVEL x OF 10), ikke globalt — spilleren taenker i kapitler, ikke i indeks.
+function legLabel() {
+  if (legIndex < HOME_LEGS.length) {
+    return isLastHomeLeg() ? 'FINAL APPROACH'
+                           : 'STOP ' + (legIndex + 1) + ' OF ' + HOME_LEGS.length;
+  }
+  const n = legIndex - HOME_LEGS.length + 1;
+  return isFinalLeg() ? 'FINAL RUN' : 'LEVEL ' + n + ' OF ' + BETELGEUSE_LEGS.length;
+}
 // Home-ending-state: cliffhanger naar sidste stop er ryddet. Genbruger ambushWon's
 // retreat/kollisions-fri slut-tilstand, men viser sit eget overlay (ikke family-cutscenen).
 let homeEndingVisible = false;
-// Demo-slut: vises EFTER home-endingen (historien pauser her i demoen). En tast
-// derfra starter en frisk rejse med beholdt udstyr (fri leg).
+// Seddel-state: konens haandskrevne besked, vises efter HOME-endingen. En tast
+// derfra saetter kursen mod Betelgeuse (legIndex -> foerste BETELGEUSE-leg + shop).
+let wifeNoteVisible = false;
+// Demo-slut: vises naar SIDSTE Betelgeuse-stop er ryddet (historien pauser her i
+// demoen). En tast derfra starter en frisk rejse med beholdt udstyr (fri leg).
 let demoEndVisible = false;
 // Den lejede MG er en engangs-smagsprøve i tutorialen. Naar den udløber efter
 // bagholdet saettes mgRetired=true: MG'en forsvinder fra shoppen for altid, og
@@ -2343,11 +2491,16 @@ window.addEventListener('keydown', e => {
     if (isMovementKey) e.preventDefault();
     return;
   }
-  // HOME-ending: cliffhanger efter sidste stop. Skal afbrydes FOER ambushWon-
-  // grenen (den deler retreat-tilstand) — ellers ville en tast starte family-
-  // cutscenen i stedet. En tast gaar videre til demo-slut-skaermen.
+  // Seddel + HOME-ending: skal begge afbrydes FOER ambushWon-grenen (de deler
+  // retreat-tilstand) — ellers ville en tast starte family-cutscenen i stedet.
+  // Fra sedlen saettes kursen mod Betelgeuse; fra HOME-endingen vises sedlen.
+  if (wifeNoteVisible) {
+    if (!e.repeat && ambushInputReady) departForBetelgeuse();
+    if (isMovementKey) e.preventDefault();
+    return;
+  }
   if (homeEndingVisible) {
-    if (!e.repeat && ambushInputReady) showDemoEnd();
+    if (!e.repeat && ambushInputReady) showWifeNote();
     if (isMovementKey) e.preventDefault();
     return;
   }
@@ -2397,6 +2550,24 @@ window.addEventListener('keydown', e => {
   if (isMovementKey) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// DEBUG: H hopper direkte til hjemkomsten — HOME-ending -> seddel -> Betelgeuse-
+// rejsen — saa slutspillet kan testes uden at spille simulationen + de tre
+// hjemme-stop foerst. Samme gate som K-cheaten: kun under aktiv kamp (start
+// spillet, tryk H). Saetter graduation-flagene saa naeste kamp koerer paa
+// leg-parametre og tutorial-boksen ikke haenger igen.
+window.addEventListener('keydown', e => {
+  if (e.code !== 'KeyH' || e.repeat) return;
+  if (ambushWon) return;
+  if (!player.alive || player.dying) return;
+  if (titleVisible || victoryVisible || shopVisible || cutsceneVisible || familyCutsceneVisible || pausedVisible) return;
+  hasGraduated = true;
+  tutorialCompleted = true;
+  hideTutorial();
+  legIndex = HOME_LEGS.length - 1;   // sidste hjemme-stop...
+  triggerHomeEnding();               // ...netop ryddet: HOME -> seddel -> Betelgeuse
+  console.log('[CHEAT] Hjemkomst: HOME-ending vist — naeste stop er Betelgeuse level 1');
+});
 
 // DEBUG: K saetter pirate-kill-taelleren til 9, saa naeste fjende-kill triggerer
 // ambush-win-sekvensen. Kun aktiv under selve ambush-missionen (post-graduation,
@@ -2497,7 +2668,8 @@ function advanceOverlayOnTouch() {
   if (titleVisible)        { startGameFromTitle(); return true; }
   if (victoryVisible)      { openShop(); return true; }
   if (demoEndVisible)      { if (ambushInputReady) startNewJourney(); return true; }
-  if (homeEndingVisible)   { if (ambushInputReady) showDemoEnd(); return true; }
+  if (wifeNoteVisible)     { if (ambushInputReady) departForBetelgeuse(); return true; }
+  if (homeEndingVisible)   { if (ambushInputReady) showWifeNote(); return true; }
   if (ambushWon)           { if (ambushInputReady) proceedAfterAmbush(); return true; }
   if (familyCutsceneVisible) return false;  // kun skip-knappen (DOM 'click')
   if (shopVisible)           return false;  // shoppen styres af DOM-knapper
@@ -3362,10 +3534,9 @@ function openShop() {
   // ved naeste besoeg, og resterende coins baeres med. (Engangs-init sker via
   // `let coins`/`let owned`-deklarationerne ved script-load.)
   updateShopUI();
-  // Rejse-fremdrift: vis hvilket stop der venter (sektor + STOP x OF N), saa
-  // shoppen foeles som en station undervejs hjem, ikke en uendelig grind-loop.
-  shopSubtitleEl.textContent = (isFinalLeg() ? 'FINAL APPROACH' : 'STOP ' + (legIndex + 1) + ' OF ' + HOME_LEGS.length)
-    + '  ·  ' + currentLeg().name;
+  // Rejse-fremdrift: vis hvilket stop der venter (sektor + STOP/LEVEL x OF N),
+  // saa shoppen foeles som en station undervejs, ikke en uendelig grind-loop.
+  shopSubtitleEl.textContent = legLabel() + '  ·  ' + currentLeg().name;
   shopVisible = true;
   shopEl.classList.add('visible');
   // Shoppen er en rolig forberedelsesfase. Naar baggrunds-playlisten er aktiv
@@ -3466,7 +3637,7 @@ shopLaunchBtn.addEventListener('click', () => {
   // Vis ambush-cutscenen foer kampen — teksten skifter pr. rejse-stop (sektor +
   // STOP x OF N + leg'ets egen historie), saa hvert stop foeles som et nyt sted.
   const leg = currentLeg();
-  cutsceneSubtitleEl.textContent = leg.name + '  ·  STOP ' + (legIndex + 1) + ' OF ' + HOME_LEGS.length;
+  cutsceneSubtitleEl.textContent = leg.name + '  ·  ' + legLabel();
   cutsceneStoryEl.innerHTML = leg.story;
   shopEl.classList.remove('visible');
   shopVisible = false;
@@ -3625,10 +3796,12 @@ function triggerVictory() {
 // med dette tidspunkt. Coins tjenes nu som opsamlede moent-pickups undervejs (ikke
 // en fast bounty), saa belønningen afhaenger af hvor meget spilleren naar at samle.
 
-// Et stop er ryddet: sidste stop -> HOME-ending (cliffhanger); ellers normal
-// PIRATES-BREAK-OFF -> family-cutscene -> shop, og rejsen rykker ét stop frem.
+// Et stop er ryddet: sidste HJEMME-stop -> HOME-ending (+ seddel, saa videre mod
+// Betelgeuse); allersidste Betelgeuse-stop -> demo-slut; ellers normal
+// PIRATES-BREAK-OFF -> shop, og rejsen rykker ét stop frem.
 function triggerLegWin() {
-  if (isFinalLeg()) triggerHomeEnding();
+  if (isLastHomeLeg()) triggerHomeEnding();
+  else if (isFinalLeg()) triggerVoyageEnd();
   else triggerAmbushWin();
 }
 
@@ -3636,8 +3809,9 @@ function triggerAmbushWin() {
   ambushWon = true;
   ambushInputReady = false;
   // Rejsen rykker ét stop frem — naeste LAUNCH spiller det haardere stop, og
-  // AMBUSH-cutscenen viser dets sektor-tekst. (Sidste stop gaar aldrig hertil.)
-  legIndex = Math.min(legIndex + 1, HOME_LEGS.length - 1);
+  // AMBUSH-cutscenen viser dets sektor-tekst. (Sidste hjemme-stop og sidste
+  // Betelgeuse-stop gaar aldrig hertil — de har egne triggere.)
+  legIndex = Math.min(legIndex + 1, ALL_LEGS.length - 1);
   // Mønterne blev lagt i pungen efterhaanden som de blev samlet op i kampen — her
   // viser vi bare totalen for dette stop. (Ikke-opsamlede moenter taeller ikke.)
   ambushBountyEl.innerHTML = 'COLLECTED &nbsp; +' + coinsThisMission + ' <span class="coin-pip"></span>';
@@ -3681,15 +3855,40 @@ function triggerHomeEnding() {
   setTimeout(() => { ambushInputReady = true; }, 4800);
 }
 
-// Fra HOME-ending: vis demo-slut-skaermen (historien pauser her i demoen).
-// Kort input-lockout saa tastetrykket fra HOME-skaermen ikke ogsaa lukker denne.
-function showDemoEnd() {
+// Fra HOME-ending: Brian finder konens seddel i ruinerne. Kort input-lockout saa
+// tastetrykket fra HOME-skaermen ikke ogsaa lukker sedlen, foer den er laest.
+function showWifeNote() {
   homeEndingEl.classList.remove('visible');
   homeEndingVisible = false;
+  wifeNoteVisible = true;
+  ambushInputReady = false;
+  wifeNoteEl.classList.add('visible');
+  setTimeout(() => { ambushInputReady = true; }, 2000);
+}
+
+// Fra sedlen: kursen saettes mod Betelgeuse — rejsen fortsaetter paa foerste
+// Betelgeuse-leg, tilbage gennem shoppen som alle andre stop.
+function departForBetelgeuse() {
+  wifeNoteEl.classList.remove('visible');
+  wifeNoteVisible = false;
+  ambushInputReady = false;
+  legIndex = HOME_LEGS.length;   // foerste Betelgeuse-stop
+  openShop();                    // rydder selv ambushWon-retreat-tilstanden
+}
+
+// Allersidste Betelgeuse-stop ryddet: demo-slut. Samme retreat/kollisions-fri
+// slut-tilstand som HOME-endingen, men demo-slut-overlayet direkte — det 10.
+// stops cutscene-tekst har allerede leveret selve ankomsten til Betelgeuse.
+function triggerVoyageEnd() {
+  ambushWon = true;
   demoEndVisible = true;
   ambushInputReady = false;
+  for (const b of enemyBullets) {
+    if (b.life > 900) b.life = 900;
+    b.burnerOn = false;
+  }
   demoEndEl.classList.add('visible');
-  setTimeout(() => { ambushInputReady = true; }, 2000);
+  setTimeout(() => { ambushInputReady = true; }, 4800);
 }
 
 // Fra demo-slut: start en frisk rejse (stop 1) men behold pung + ejede items
@@ -3699,6 +3898,8 @@ function startNewJourney() {
   demoEndVisible = false;
   homeEndingEl.classList.remove('visible');
   homeEndingVisible = false;
+  wifeNoteEl.classList.remove('visible');
+  wifeNoteVisible = false;
   ambushWon = false;
   ambushInputReady = false;
   legIndex = 0;
@@ -3879,6 +4080,11 @@ function spawnEnemy() {
   else if (side === 2) { x = cx + Math.random() * w; y = cy - 50; }
   else { x = cx + Math.random() * w; y = cy + h + 50; }
 
+  // Kurtar-eskorte? Kun post-graduation (tutorial-legs har intet heavyChance),
+  // og kun paa Betelgeuse-legs fra level 5 hvor feltet er sat.
+  const heavy = hasGraduated && Math.random() < (currentLeg().heavyChance || 0);
+  const scale = heavy ? HEAVY_SCALE : 1;
+
   enemies.push({
     x: x, y: y,
     vx: 0, vy: 0,
@@ -3888,7 +4094,11 @@ function spawnEnemy() {
     hullType: Math.floor(Math.random() * HULL_DEFS.length),
     turretType: Math.floor(Math.random() * TURRET_DEFS.length),
     hullAngle: Math.random() * Math.PI * 2,
-    radius: 18,
+    heavy: heavy,
+    scale: scale,                    // tegne- OG hit-lokal-skala (se drawEnemy)
+    radius: 18 * scale,              // kollisions/hitscan-radius foelger skroget
+    maxHits: ENEMY_MAX_HITS * (heavy ? HEAVY_HITS_MULT : 1),
+    fireTier: ENEMY_FIRE_TIER * (heavy ? HEAVY_HITS_MULT : 1),
     hits: 0,
     dying: false,
     dyingT: 0,
@@ -4378,7 +4588,9 @@ function update(now) {
     }
 
     // Thrust toward target angle
-    const ENEMY_THRUST = 35;  // slow capital-ship feel
+    // Slow capital-ship feel. Eskorter: samme motorer, halvanden gang massen —
+    // de skal FOELES tungere, ikke bare vaere stoerre hitbokse.
+    const ENEMY_THRUST = e.heavy ? 26 : 35;
     const eax = Math.cos(e.targetAngle) * ENEMY_THRUST;
     const eay = Math.sin(e.targetAngle) * ENEMY_THRUST;
     e.vx += eax * dtSec;
@@ -4425,17 +4637,17 @@ function update(now) {
         const damage = lightBullet ? (1 / 6) : 1;
         e.hits += damage;
         // Ship-local hit position: inverse rotate (hullAngle — marks live on the
-        // hull layer) + inverse scale (0.85)
+        // hull layer) + inverse scale (0.85 * fjendens egen skala)
         const cosA = Math.cos(e.hullAngle), sinA = Math.sin(e.hullAngle);
-        let localX = (bdx * cosA + bdy * sinA) / 0.85;
-        let localY = (-bdx * sinA + bdy * cosA) / 0.85;
+        let localX = (bdx * cosA + bdy * sinA) / (0.85 * e.scale);
+        let localY = (-bdx * sinA + bdy * cosA) / (0.85 * e.scale);
         // Project onto inner ellipse so marks lander paa skroget
         const A = 12, B = 11;
         const r = Math.sqrt((localX / A) * (localX / A) + (localY / B) * (localY / B));
         if (r > 1) { localX /= r; localY /= r; }
         // Epsilon: 18 * (1/6) kan lande paa 2.9999... i double precision. Uden
         // tolerance ville fjenden krave 19 MG-hits i stedet for 18.
-        if (e.hits >= ENEMY_MAX_HITS - 1e-9) {
+        if (e.hits >= e.maxHits - 1e-9) {
           // Doedelig akkumulering: dying-fasen starter. Tilfoej ekstra fire-
           // maerker for spredning af flammer over skroget.
           e.dying = true;
@@ -4462,7 +4674,7 @@ function update(now) {
           sfxImpactExplosion();
           sfxBurning(e.dyingDuration / 1000);
         } else {
-          const inFireTier = e.hits > ENEMY_FIRE_TIER;   // samme threshold som visuel tier
+          const inFireTier = e.hits > e.fireTier;   // samme threshold som visuel tier
           const tier = inFireTier ? 'fire' : 'crack';
           e.damageMarks.push({ localX, localY, tier, seed: Math.random() });
           if (lightBullet) {
@@ -4473,7 +4685,7 @@ function update(now) {
             else            sfxBulletMetal();
           } else {
             // Raket: ricochet i crack-tier, ellers impact-eksplosion.
-            if (e.hits <= ENEMY_FIRE_TIER) sfxRicochet();
+            if (e.hits <= e.fireTier) sfxRicochet();
             else             sfxImpactExplosion();
           }
         }
@@ -4594,7 +4806,7 @@ function updateLaser(firing, dtSec) {
     hitE.hits += dps * dtSec;
     if (Math.random() < 0.4) spawnSpark(laserBeam.x2, laserBeam.y2, ang + Math.PI);
     startLaserWeld();   // let svejse-syden mens strålen rammer
-    if (hitE.hits >= ENEMY_MAX_HITS - 1e-9) laserKill(hitE);
+    if (hitE.hits >= hitE.maxHits - 1e-9) laserKill(hitE);
   } else {
     laserBeam.x2 = ox + dx * LASER_RANGE;
     laserBeam.y2 = oy + dy * LASER_RANGE;
@@ -4705,7 +4917,7 @@ function applyEnemyHit(e, worldNormalX, worldNormalY) {
   // worldNormalX/Y: enhedsvektor fra fjende mod player. Contact paa fjendens
   // hull er i modsat retning fra fjenden's center.
   e.hits++;
-  if (e.hits >= ENEMY_MAX_HITS) {
+  if (e.hits >= e.maxHits) {
     e.dying = true;
     e.dyingT = 0;
     const A = 12, B = 11;
@@ -4721,16 +4933,16 @@ function applyEnemyHit(e, worldNormalX, worldNormalY) {
     }
     return;
   }
-  // Ship-local for fjende: inverse rotate (hullAngle) + inverse scale (0.85)
+  // Ship-local for fjende: inverse rotate (hullAngle) + inverse scale (0.85 * egen skala)
   const wdx = worldNormalX * e.radius;
   const wdy = worldNormalY * e.radius;
   const cosA = Math.cos(e.hullAngle), sinA = Math.sin(e.hullAngle);
-  let localX = (wdx * cosA + wdy * sinA) / 0.85;
-  let localY = (-wdx * sinA + wdy * cosA) / 0.85;
+  let localX = (wdx * cosA + wdy * sinA) / (0.85 * e.scale);
+  let localY = (-wdx * sinA + wdy * cosA) / (0.85 * e.scale);
   const A = 12, B = 11;
   const r = Math.sqrt((localX / A) * (localX / A) + (localY / B) * (localY / B));
   if (r > 1) { localX /= r; localY /= r; }
-  const tier = (e.hits <= ENEMY_FIRE_TIER) ? 'crack' : 'fire';
+  const tier = (e.hits <= e.fireTier) ? 'crack' : 'fire';
   e.damageMarks.push({ localX, localY, tier, seed: Math.random() });
 }
 
@@ -5413,8 +5625,10 @@ function drawEnemy(e) {
   ctx.translate(e.x, e.y);
   // Skalering: skroget tegnes i sit oprindelige koordinatsystem (extents ±18)
   // og skaleres ned saa den endelige fjende er lidt stoerre end spilleren.
-  // WORLD_SCALE (eksperiment) krymper fjenden yderligere.
-  ctx.scale(0.85 * WORLD_SCALE, 0.85 * WORLD_SCALE);
+  // WORLD_SCALE (eksperiment) krymper fjenden yderligere. e.scale: Kurtar-
+  // eskorter tegnes 50% stoerre — flamme, skrog, damage-marks og taarn foelger
+  // alle med, fordi de tegnes inde i denne frame.
+  ctx.scale(0.85 * WORLD_SCALE * e.scale, 0.85 * WORLD_SCALE * e.scale);
 
   const hull = HULL_DEFS[e.hullType];
   const turret = TURRET_DEFS[e.turretType];
