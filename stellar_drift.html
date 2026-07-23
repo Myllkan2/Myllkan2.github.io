@@ -411,6 +411,33 @@
     z-index: 5;
   }
   body.combat #pauseBtn { display: flex; }
+  /* Level-progress-bar: lille og diskret under pause/mute-knapperne. Guld-fyld
+     (bounty-farven) saa den laeses som "belønning paa vej", ikke som en hull-bar.
+     Synlighed styres i JS (kraever hasGraduated, ikke kun body.combat). */
+  #legProgress {
+    position: fixed;
+    top: 68px;   /* pause/mute-knapperne slutter ved 14+46=60px — lidt luft under */
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(240px, 44vw);
+    height: 7px;
+    background: rgba(10, 20, 35, 0.75);
+    border: 1px solid rgba(120, 170, 230, 0.35);
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+    z-index: 5;
+  }
+  #legProgress.visible { opacity: 1; }
+  #legProgressFill {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, rgba(255, 190, 100, 0.9), rgba(255, 230, 160, 0.95));
+    box-shadow: 0 0 8px rgba(255, 200, 110, 0.55);
+    transition: width 0.25s ease;
+  }
   #pauseBtn:hover { background: rgba(40, 60, 100, 0.6); border-color: rgba(180, 210, 255, 0.6); }
   #pauseBtn .bar {
     width: 5px;
@@ -1213,6 +1240,9 @@
 <button id="pauseBtn" aria-label="Pause game">
   <span class="bar"></span><span class="bar"></span>
 </button>
+<!-- Level-progress: fyldes med kills paa det aktuelle stop. Fuld bar = piraterne
+     bryder af og flygter (loot-gracen holder den fulde bar synlig imens). -->
+<div id="legProgress"><div id="legProgressFill"></div></div>
 <div id="pauseScreen">
   <div class="title">PAUSED</div>
   <div class="prompt">PRESS ANY KEY OR TAP TO RESUME</div>
@@ -1496,6 +1526,8 @@ const portraitImgEl = document.getElementById('portraitImg');
 const portraitMoodEl = document.getElementById('portraitMood');
 const pauseScreenEl = document.getElementById('pauseScreen');
 const pauseBtnEl = document.getElementById('pauseBtn');
+const legProgressEl = document.getElementById('legProgress');
+const legProgressFillEl = document.getElementById('legProgressFill');
 
 // Brians humør-stige, fra værst til bedst. Index 5 = CONTENT er default.
 // Mekanikker bag skift kobles paa senere — for nu er det rent kosmetisk state.
@@ -1664,6 +1696,12 @@ const FAMILY_CUTSCENE_SEEN_KEY = 'stellardrift.cutscene.familyPhoto.seen';
 // fjenderne kan flygte ud og raketter kan dø ud) men kollisioner er slaaet fra.
 let pirateKills = 0;
 let ambushWon = false;
+// Loot-grace: naar kill-maalet naas flygter piraterne MED DET SAMME (ambushWon),
+// men win-overlayet venter LOOT_GRACE_MS. I det vindue beholder spilleren
+// styringen og kan stoevsuge naerliggende moenter op, foer skaermen laases.
+const LOOT_GRACE_MS = 3000;
+let lootGraceActive = false;
+let lootGraceUntil = 0;
 // Input-lockout: forhindrer at en tast under retreat-sekvensen straks lukker
 // overlayet, foer spilleren har naaet at se flugten + laese noten.
 let ambushInputReady = false;
@@ -2507,8 +2545,9 @@ window.addEventListener('keydown', e => {
   // Ambush-win: enhver tast tager spilleren videre — foerst gennem family-
   // cutscenen (melankolsk pilot-rum), derefter ind i shoppen. Foerst naar
   // input-lockouten er sluppet (saa retreat-sekvensen + noten ikke springes
-  // over hvis spilleren rammer en tast i samme oejeblik).
-  if (ambushWon) {
+  // over hvis spilleren rammer en tast i samme oejeblik). Under loot-gracen
+  // falder vi IGENNEM til aktiv-kamp-input: spilleren flyver stadig.
+  if (ambushWon && !lootGraceActive) {
     if (!e.repeat && ambushInputReady) proceedAfterAmbush();
     if (isMovementKey) e.preventDefault();
     return;
@@ -2670,7 +2709,7 @@ function advanceOverlayOnTouch() {
   if (demoEndVisible)      { if (ambushInputReady) startNewJourney(); return true; }
   if (wifeNoteVisible)     { if (ambushInputReady) departForBetelgeuse(); return true; }
   if (homeEndingVisible)   { if (ambushInputReady) showWifeNote(); return true; }
-  if (ambushWon)           { if (ambushInputReady) proceedAfterAmbush(); return true; }
+  if (ambushWon && !lootGraceActive) { if (ambushInputReady) proceedAfterAmbush(); return true; }
   if (familyCutsceneVisible) return false;  // kun skip-knappen (DOM 'click')
   if (shopVisible)           return false;  // shoppen styres af DOM-knapper
   if (cutsceneVisible)     { cutsceneEl.classList.remove('visible'); cutsceneVisible = false; restartGame(); return true; }
@@ -3198,7 +3237,8 @@ function spawnPickup(x, y, vx, vy, kind, weapon) {
 // Opdater alle pickups: magnet mod skibet naar tæt paa, mild drift-daempning,
 // wrap som andre entiteter, og opsamling ved overlap med skibet.
 function updatePickups(dtSec, dt) {
-  const collectable = player.alive && !player.dying && !ambushWon;
+  // Loot-gracen holder moenterne opsamlelige selvom kampen formelt er vundet.
+  const collectable = player.alive && !player.dying && (!ambushWon || lootGraceActive);
   const mag = PICKUP_MAGNET_RADIUS;
   for (let i = pickups.length - 1; i >= 0; i--) {
     const p = pickups[i];
@@ -3476,6 +3516,7 @@ function restartGame() {
   ambushWinEl.classList.remove('visible');
   ambushWon = false;
   ambushInputReady = false;
+  lootGraceActive = false;   // gameTime nulstilles ovenfor — fristen maa ikke haenge
   // Defensiv: home-ending/demo-slut kan staa hvis logikken kalder restartGame midt i.
   homeEndingEl.classList.remove('visible');
   homeEndingVisible = false;
@@ -3798,10 +3839,23 @@ function triggerVictory() {
 // med dette tidspunkt. Coins tjenes nu som opsamlede moent-pickups undervejs (ikke
 // en fast bounty), saa belønningen afhaenger af hvor meget spilleren naar at samle.
 
-// Et stop er ryddet: sidste HJEMME-stop -> HOME-ending (+ seddel, saa videre mod
-// Betelgeuse); allersidste Betelgeuse-stop -> demo-slut; ellers normal
-// PIRATES-BREAK-OFF -> shop, og rejsen rykker ét stop frem.
+// Kill-maalet er naaet: piraterne bryder af nu (retreat via ambushWon), men
+// overlayet foerst efter loot-gracen — se finishLegWin. Fjendernes raketter er
+// harmloese fra dette oejeblik, saa de kappes ogsaa her (ikke foerst i triggerne).
 function triggerLegWin() {
+  ambushWon = true;
+  lootGraceActive = true;
+  lootGraceUntil = gameTime + LOOT_GRACE_MS;
+  for (const b of enemyBullets) {
+    if (b.life > 900) b.life = 900;
+    b.burnerOn = false;
+  }
+}
+
+// Loot-gracen er udloebet: sidste HJEMME-stop -> HOME-ending (+ seddel, saa
+// videre mod Betelgeuse); allersidste Betelgeuse-stop -> demo-slut; ellers
+// normal PIRATES-BREAK-OFF -> shop, og rejsen rykker ét stop frem.
+function finishLegWin() {
   if (isLastHomeLeg()) triggerHomeEnding();
   else if (isFinalLeg()) triggerVoyageEnd();
   else triggerAmbushWin();
@@ -4137,6 +4191,12 @@ function update(now) {
   lastTime = now;
   gameTime += dt;
   const dtSec = dt / 1000;
+
+  // Loot-grace efter et ryddet stop: naar fristen udloeber vises win-overlayet.
+  if (lootGraceActive && gameTime >= lootGraceUntil) {
+    lootGraceActive = false;
+    finishLegWin();
+  }
 
   // --- Dying state: 1.5s build-up med voksende flammer, derefter eksplosion ---
   if (player.dying) {
@@ -6234,6 +6294,16 @@ function loop(now) {
   // gennemsigtigt — samme stil som mobil-udgaven — saa man kan se rumskibet
   // flyve bag det i øverste højre hjørne.
   document.body.classList.toggle('combat', !overlayActive());
+  // Level-progress-bar: kun under rejse-kampe (post-graduation) — tutorialen har
+  // sit eget maal. Under loot-gracen staar den fuld mens piraterne flygter
+  // (overlayActive() er sand dér pga. ambushWon, deraf undtagelsen).
+  const showLegBar = hasGraduated && player.alive && !player.dying &&
+                     (!overlayActive() || lootGraceActive);
+  legProgressEl.classList.toggle('visible', showLegBar);
+  if (showLegBar) {
+    const pct = Math.min(1, pirateKills / currentLeg().killTarget) * 100;
+    legProgressFillEl.style.width = pct + '%';
+  }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
