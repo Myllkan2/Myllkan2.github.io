@@ -25,3 +25,5 @@ store-assets/
 signing-key-info.txt
 *.apk
 *.aab
+# Hele pakke-mappen, saa intet derfra kan ryge med ved et uheld
+Stellar Drift - Google Play package/
