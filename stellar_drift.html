@@ -3170,8 +3170,10 @@ function refreshWeaponHUD() {
 // Drop loot fra en draebt fjende — ogsaa i tutorialen, saa pickups/power-ups
 // laeres FOER de betyder noget i rejse-kampene. Moent altid; vaaben dropper
 // GARANTERET ved missionens foerste kill, derefter med WEAPON_DROP_CHANCE.
-function spawnDrops(x, y, vx, vy) {
-  spawnPickup(x, y, vx, vy, 'coin', null);
+function spawnDrops(x, y, vx, vy, coinCount = 1) {
+  // Eskorter dropper 2 moenter — hver med sit eget tilfaeldige kast, saa de
+  // spreder sig synligt i stedet for at ligge oven i hinanden.
+  for (let c = 0; c < coinCount; c++) spawnPickup(x, y, vx, vy, 'coin', null);
   const guaranteed = !firstKillWeaponDropped;
   if (guaranteed || Math.random() < WEAPON_DROP_CHANCE) {
     // Drop kun vaaben spilleren ikke allerede har aktivt (ingen nytteloese dubletter).
@@ -3873,6 +3875,13 @@ function departForBetelgeuse() {
   wifeNoteVisible = false;
   ambushInputReady = false;
   legIndex = HOME_LEGS.length;   // foerste Betelgeuse-stop
+  // Normalisér engangs-events fra tidligt i spillet. I normal gennemspilning er
+  // begge allerede sket (no-op) — men H-cheaten springer dem over, og saa ville
+  // family-cutscenen spille og MG-lejen dukke op igen midt i Betelgeuse-rejsen.
+  familyCutscenePlayed = true;
+  mgRetired = true;
+  owned.weapons = owned.weapons.filter(w => w !== 'weapon-mg');
+  if (equippedWeapon === 'weapon-mg') equippedWeapon = 'default';
   openShop();                    // rydder selv ambushWon-retreat-tilstanden
 }
 
@@ -4517,8 +4526,9 @@ function update(now) {
         spawnBigExplosion(e.x, e.y, e.vx, e.vy);
         spawnEnemyDebris(e.x, e.y, e.vx, e.vy, e.aimAngle);
         sfxBigExplosion();
-        spawnDrops(e.x, e.y, e.vx, e.vy);   // moent (+ evt. vaaben) til opsamling
-        score += 100;
+        // Eskorter er dobbelt saa meget vaerd: 2 moenter + 200 point.
+        spawnDrops(e.x, e.y, e.vx, e.vy, e.heavy ? 2 : 1);
+        score += e.heavy ? 200 : 100;
         scoreEl.textContent = score;
         enemies.splice(i, 1);
         // 1000 point = simulationen bestaaet. Kun foer foerste graduation —
@@ -4838,17 +4848,20 @@ function laserKill(e) {
 function fireEnemyBullet(e) {
   sfxFire({ volume: 0.55, durationScale: 0.6 });   // SFX 6: ligesom player, men lavere og 40% kortere
   // Rocket: starts slow, burns to target speed, then coasts.
-  const TARGET_SPEED = 129.6;   // +20% max speed (was 108) — harder to dodge now ships are smaller
-  const INITIAL_SPEED = 33;   // burner ignites here
-  const ACCEL = 125;          // px/s^2: reaches target in ~0.6s
+  // Kurtar-eskorter affyrer 40% stoerre og 40% hurtigere missiler — accel skaleres
+  // med saa burn-fasen varer det samme, missilet er bare skarpere i alle led.
+  const msl = e.heavy ? 1.4 : 1;
+  const TARGET_SPEED = 129.6 * msl;   // +20% max speed (was 108) — harder to dodge now ships are smaller
+  const INITIAL_SPEED = 33 * msl;   // burner ignites here
+  const ACCEL = 125 * msl;          // px/s^2: reaches target in ~0.6s
   // Predict player position - lead time scaled with shell travel time
   const leadTime = 2.0;
   const tx = player.x + player.vx * leadTime;
   const ty = player.y + player.vy * leadTime;
   const aimAng = Math.atan2(ty - e.y, tx - e.x);
   enemyBullets.push({
-    x: e.x + Math.cos(aimAng) * 24 * WORLD_SCALE,
-    y: e.y + Math.sin(aimAng) * 24 * WORLD_SCALE,
+    x: e.x + Math.cos(aimAng) * 24 * WORLD_SCALE * e.scale,
+    y: e.y + Math.sin(aimAng) * 24 * WORLD_SCALE * e.scale,
     vx: Math.cos(aimAng) * INITIAL_SPEED,
     vy: Math.sin(aimAng) * INITIAL_SPEED,
     life: 18000,
@@ -4856,6 +4869,7 @@ function fireEnemyBullet(e) {
     ownSpeed: INITIAL_SPEED,
     targetSpeed: TARGET_SPEED,
     accel: ACCEL,
+    scale: msl,                 // tegne-skala: eskorte-missiler er 40% stoerre
     burnerOn: true
   });
 }
@@ -5892,12 +5906,15 @@ function drawLaserBeam() {
 function drawEnemyBullets() {
   ctx.save();
   for (const b of enemyBullets) {
+    // Eskorte-missiler tegnes 40% stoerre — samme faktor i alle tre lag
+    // (plume, glow/trail, shell) saa missilet skalerer som én helhed.
+    const bs = WORLD_SCALE * (b.scale || 1);
     // Burner plume (only while rocket motor is firing)
     if (b.burnerOn) {
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(b.angle);
-      ctx.scale(WORLD_SCALE, WORLD_SCALE);
+      ctx.scale(bs, bs);
       ctx.globalCompositeOperation = 'lighter';
       const flicker = 0.85 + Math.sin(gameTime * 0.07 + b.x * 0.1) * 0.15;
       const plumeLen = 14 * flicker;
@@ -5916,7 +5933,7 @@ function drawEnemyBullets() {
     }
     // Heavy enemy shell - larger, hotter, with a glowing trail
     ctx.save();
-    scaleAbout(b.x, b.y, WORLD_SCALE);
+    scaleAbout(b.x, b.y, bs);
     ctx.globalCompositeOperation = 'lighter';
     // Long warm trail - only while burner is firing
     if (b.burnerOn) {
@@ -5949,7 +5966,7 @@ function drawEnemyBullets() {
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.angle);
-    ctx.scale(WORLD_SCALE, WORLD_SCALE);
+    ctx.scale(bs, bs);
     // Shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(-4.5, -2.5, 9, 5);
