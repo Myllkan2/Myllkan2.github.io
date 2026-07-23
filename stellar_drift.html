@@ -1234,7 +1234,7 @@
   <div class="briefing">
     Welcome to the <strong>Space Academy Simulation</strong>.<br><br>
     For you to get license to own a spacecraft with weapons, you need to pass this simulation. Get used to the control mechanisms, the steering rocket as well as the rocket weaponry.<br><br>
-    You pass if you can get <strong>1000 points</strong> without exploding.<br><br>
+    You pass if you can get <strong>500 points</strong> without exploding.<br><br>
     Good Luck!
   </div>
   <div class="prompt">PRESS ANY KEY TO START</div>
@@ -1679,7 +1679,11 @@ let titleVisible = true;
 // Pause: fryser update-loopet og pauser musikken. Kan kun aktiveres under aktiv
 // kamp (ikke oven paa andre overlays — de fryser allerede spillet selv).
 let pausedVisible = false;
-// Victory-state: saettes naar score naar 1000 — fryser gameplay og viser overlay.
+// Graduation-maal for simulationen: 500 point = 5 kills (var 1000/10 — for lang
+// en tutorial foer spillet aabner sig). Bruges af victory-checket, bar'en og
+// tutorial-teksterne, saa tallet kun bor ét sted.
+const GRADUATION_SCORE = 500;
+// Victory-state: saettes naar score naar GRADUATION_SCORE — fryser gameplay og viser overlay.
 let victoryVisible = false;
 // Simulation vs. post-shop sværhedsgrad. False ved ny session — efter foerste
 // triggerVictory bliver den true og overlever restartGame, saa en spiller der
@@ -3345,8 +3349,8 @@ const TUTORIAL_STEPS = [
   // humoer, hits saenker det — og humoeret skalerer thrust/skudtakt/sigte (moodFx).
   { desktop: 'BRIAN&rsquo;S MOOD (top right) AFFECTS HANDLING<br>KILLS LIFT IT &mdash; GETTING HIT DROPS IT',
     touch:   'BRIAN&rsquo;S MOOD (top right) AFFECTS HANDLING<br>KILLS LIFT IT &mdash; GETTING HIT DROPS IT' },
-  { desktop: 'DESTROY THE DRONES &mdash; reach 1000 POINTS',
-    touch:   'DESTROY THE DRONES &mdash; reach 1000 POINTS' }
+  { desktop: 'DESTROY THE DRONES &mdash; reach ' + GRADUATION_SCORE + ' POINTS',
+    touch:   'DESTROY THE DRONES &mdash; reach ' + GRADUATION_SCORE + ' POINTS' }
 ];
 
 function refreshTutorialText() {
@@ -3388,7 +3392,7 @@ function completeTutorial() {
   tutorialCompleted = true;
   tutorialEl.classList.add('done');
   tutorialCountEl.textContent = '';
-  tutorialTextEl.textContent = 'FIRST KILL CONFIRMED — REACH 1000 POINTS';
+  tutorialTextEl.textContent = 'FIRST KILL CONFIRMED — REACH ' + GRADUATION_SCORE + ' POINTS';
   sfxWeaponPickup({ volume: 0.7 });
   clearTimeout(tutSwapTimer);
   tutSwapTimer = setTimeout(hideTutorial, 3200);
@@ -4601,10 +4605,10 @@ function update(now) {
         score += e.heavy ? 200 : 100;
         scoreEl.textContent = score;
         enemies.splice(i, 1);
-        // 1000 point = simulationen bestaaet. Kun foer foerste graduation —
+        // GRADUATION_SCORE point = simulationen bestaaet. Kun foer foerste graduation —
         // efter shop er score-systemet stadig aktivt men maa ikke gen-trigge
         // license-overlayet (ambush-missionen har sin egen win-betingelse).
-        if (!hasGraduated && !victoryVisible && score >= 1000) triggerVictory();
+        if (!hasGraduated && !victoryVisible && score >= GRADUATION_SCORE) triggerVictory();
         continue;
       }
       e.x += e.vx * dtSec;
@@ -6305,14 +6309,14 @@ function loop(now) {
   // flyve bag det i øverste højre hjørne.
   document.body.classList.toggle('combat', !overlayActive());
   // Level-progress-bar: rejse-kampe fyldes med kills mod stoppets maal; i
-  // simulationen fyldes den med score mod graduation (1000 — skal matche
-  // triggerVictory-checket). Under loot-gracen staar den fuld mens piraterne
-  // flygter (overlayActive() er sand dér pga. ambushWon, deraf undtagelsen).
+  // simulationen fyldes den med score mod GRADUATION_SCORE. Under loot-gracen
+  // staar den fuld mens piraterne flygter (overlayActive() er sand dér pga.
+  // ambushWon, deraf undtagelsen).
   const showLegBar = player.alive && !player.dying &&
                      (!overlayActive() || lootGraceActive);
   legProgressEl.classList.toggle('visible', showLegBar);
   if (showLegBar) {
-    const frac = hasGraduated ? pirateKills / currentLeg().killTarget : score / 1000;
+    const frac = hasGraduated ? pirateKills / currentLeg().killTarget : score / GRADUATION_SCORE;
     legProgressFillEl.style.width = (Math.min(1, frac) * 100) + '%';
   }
   requestAnimationFrame(loop);
