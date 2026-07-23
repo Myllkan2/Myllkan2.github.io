@@ -3213,8 +3213,17 @@ let weaponHudActive = false;     // vaaben-HUD vises kun i rejse-kampene
 // i stedet for endnu en sideloebende affyringsrampe ("RKT + RKT").
 const ROCKET_IDS = ['default', 'weapon-rl'];
 const ROCKET_MAG_MAX = 10;       // HUD-raekken skal kunne vaere der
-function freshTiming() { return { cooldown: 0, magazine: 5, magCap: 5 }; }
+// Dublet-progression for de oevrige vaaben: laser gaar WEAK->MEDIUM->STRONG->
+// HEAVY (tykkere straale, +15% skade pr. trin), MG gaar op i kaliber (stoerre
+// kugler, +15% skade pr. trin), rusty faar bare flere rustne kanoner ved siden
+// af hinanden. Naar et vaaben er ved max-trin forsvinder det fra drop-puljen.
+const LASER_TIERS = ['WEAK', 'MEDIUM', 'STRONG', 'HEAVY'];
+const MG_CALIBERS = ['9MM', '11MM', '13MM', '15MM'];
+const RUSTY_MAX_GUNS = 4;
+const STACK_DMG_MULT = 1.15;
+function freshTiming() { return { cooldown: 0, magazine: 5, magCap: 5, tier: 0, guns: 1 }; }
 function activeRocketId() { return activeWeapons.find(w => ROCKET_IDS.includes(w)); }
+function weaponTier(id) { return (weaponTiming[id] || {}).tier || 0; }
 
 // Nyt mission-start: nulstil til kun base-vaabnet.
 function startMissionWeapons() {
@@ -3240,7 +3249,15 @@ function addActiveWeapon(id) {
       return;
     }
   }
-  if (activeWeapons.includes(id)) return;
+  // Laser/MG-dublet: et trin op ad tier-stigen. Rusty-dublet: én kanon mere.
+  if (activeWeapons.includes(id)) {
+    const ts = weaponTiming[id];
+    if (id === 'weapon-laser' && ts.tier < LASER_TIERS.length - 1) ts.tier++;
+    else if (id === 'weapon-mg' && ts.tier < MG_CALIBERS.length - 1) ts.tier++;
+    else if (id === 'weapon-rusty' && ts.guns < RUSTY_MAX_GUNS) ts.guns++;
+    refreshWeaponHUD();
+    return;
+  }
   activeWeapons.push(id);
   weaponTiming[id] = freshTiming();
   if (id === 'weapon-mg') { player.heat = 0; player.overheated = false; }
@@ -3256,9 +3273,25 @@ function refreshWeaponHUD() {
   heatBlockEl.classList.toggle('visible', show && activeWeapons.includes('weapon-mg'));
   if (!activeWeapons.length) { weaponNameEl.textContent = ''; return; }
   weaponNameEl.textContent = activeWeapons.length === 1
-    ? (WEAPON_NAMES[activeWeapons[0]] || activeWeapons[0])
-    : activeWeapons.map(w => WEAPON_SHORT[w] || w).join(' + ');
+    ? weaponDisplayName(activeWeapons[0])
+    : activeWeapons.map(weaponShortName).join(' + ');
   weaponNameEl.classList.toggle('boosted', activeWeapons.length > 1);
+}
+
+// Navne afspejler dublet-progressionen: laser-tier, MG-kaliber, antal rustys.
+function weaponDisplayName(id) {
+  const ts = weaponTiming[id] || {};
+  if (id === 'weapon-laser') return LASER_TIERS[ts.tier || 0] + ' LASER';
+  if (id === 'weapon-mg')    return 'MACHINE GUN ' + MG_CALIBERS[ts.tier || 0];
+  if (id === 'weapon-rusty') return ((ts.guns || 1) > 1 ? ts.guns + '× ' : '') + 'RUSTY SPACEGUN';
+  return WEAPON_NAMES[id] || id;
+}
+function weaponShortName(id) {
+  const ts = weaponTiming[id] || {};
+  if (id === 'weapon-laser') return 'LAS' + '+'.repeat(ts.tier || 0);
+  if (id === 'weapon-mg')    return 'MG' + '+'.repeat(ts.tier || 0);
+  if (id === 'weapon-rusty') return ((ts.guns || 1) > 1 ? ts.guns + '×' : '') + 'RST';
+  return WEAPON_SHORT[id] || id;
 }
 
 // Raket-kanistre: én pr. plads i magasinet, fyldt = klar. Kaldes hver frame fra
@@ -3289,14 +3322,19 @@ function spawnDrops(x, y, vx, vy, coinCount = 1) {
   for (let c = 0; c < coinCount; c++) spawnPickup(x, y, vx, vy, 'coin', null);
   const guaranteed = !firstKillWeaponDropped;
   if (guaranteed || Math.random() < WEAPON_DROP_CHANCE) {
-    // Drop kun vaaben spilleren ikke allerede har aktivt (ingen nytteloese
-    // dubletter) — undtagen raketter, som stables (+1 kanister) indtil cap.
+    // Alle vaaben stables nu ved dublet-pickup — et vaaben forlader foerst
+    // drop-puljen naar dets progression er maxet (kanistre/tier/antal kanoner).
     const pool = DROP_WEAPONS.filter(w => {
       if (ROCKET_IDS.includes(w)) {
         const cur = activeRocketId();
         return !cur || weaponTiming[cur].magCap < ROCKET_MAG_MAX;
       }
-      return !activeWeapons.includes(w);
+      if (!activeWeapons.includes(w)) return true;
+      const ts = weaponTiming[w];
+      if (w === 'weapon-laser') return ts.tier < LASER_TIERS.length - 1;
+      if (w === 'weapon-mg')    return ts.tier < MG_CALIBERS.length - 1;
+      if (w === 'weapon-rusty') return ts.guns < RUSTY_MAX_GUNS;
+      return false;
     });
     const w = pool[Math.floor(Math.random() * pool.length)];
     if (w) { spawnPickup(x, y, vx, vy, 'weapon', w); firstKillWeaponDropped = true; }
@@ -4462,8 +4500,12 @@ function update(now) {
       const useRusty = (id === 'weapon-rusty');
       const burst = Math.min(moodFx().fireMult, ts.magazine);   // Angry: fireMult skud
       for (let k = 0; k < burst; k++) {
-        if (useRusty) fireRustyBullet(firingAngle(RUSTY_SPREAD_DEG));
-        else          fireBullet(firingAngle());
+        if (useRusty) {
+          // n rustne kanoner fyrer i samme salve — hver med sin egen skæve
+          // spredning, saa 2 rustys laeses som en bred, sjusket dobbelt-salve.
+          for (let g = 0; g < (ts.guns || 1); g++) fireRustyBullet(firingAngle(RUSTY_SPREAD_DEG));
+        }
+        else fireBullet(firingAngle());
         ts.magazine--;
       }
       if (useRusty) sfxRevolver();
@@ -4784,8 +4826,9 @@ function update(now) {
         if (lightBullet) spawnSpark(b.x, b.y, b.angle);
         else             spawnExplosion(b.x, b.y, b.angle);
         // Damage: raket = 1 hit, MG/rusty = 1/6 hit (18 kugler droeber en fjende).
+        // MG-kugler baerer deres egen dmg (kaliber-progression: +15% pr. trin).
         // e.hits er fra nu af en float.
-        const damage = lightBullet ? (1 / 6) : 1;
+        const damage = b.dmg !== undefined ? b.dmg : (lightBullet ? (1 / 6) : 1);
         e.hits += damage;
         // Ship-local hit position: inverse rotate (hullAngle — marks live on the
         // hull layer) + inverse scale (0.85 * fjendens egen skala)
@@ -4884,6 +4927,8 @@ function fireMGBullet(angle) {
   const turretX = player.x;
   const turretY = player.y - 8 * WORLD_SCALE;   // taarn-offset foelger skibets stoerrelse
   const barrelLen = 14 * WORLD_SCALE;
+  // Kaliber-progression: +15% skade og lidt stoerre kugle pr. MG-trin.
+  const mgTier = weaponTier('weapon-mg');
   bullets.push({
     kind: 'mg',
     x: turretX + Math.cos(angle) * barrelLen,
@@ -4892,6 +4937,8 @@ function fireMGBullet(angle) {
     vy: player.vy + Math.sin(angle) * SPEED,
     life: 1200,                 // 1.2s — rigeligt til at krydse skaerm
     angle: angle,
+    dmg: (1 / 6) * Math.pow(STACK_DMG_MULT, mgTier),
+    size: 1 + mgTier * 0.25,    // tegne-skala paa tracer/gloed
     burnerOn: false             // ingen accel-fase
   });
 }
@@ -4953,7 +5000,9 @@ function updateLaser(firing, dtSec) {
     // Ny fjende i strålen? Optaendingen starter forfra — som at flytte luppen.
     if (hitE !== laserTarget) { laserCharge = 0; laserTarget = hitE; }
     laserCharge = Math.min(1, laserCharge + LASER_CHARGE_RATE * dtSec);
-    const dps = LASER_DPS_MIN + (LASER_DPS_MAX - LASER_DPS_MIN) * laserCharge;
+    // Tier-multiplikator: +15% skade pr. laser-trin (WEAK -> HEAVY).
+    const dps = (LASER_DPS_MIN + (LASER_DPS_MAX - LASER_DPS_MIN) * laserCharge)
+                * Math.pow(STACK_DMG_MULT, weaponTier('weapon-laser'));
     hitE.hits += dps * dtSec;
     if (Math.random() < 0.4) spawnSpark(laserBeam.x2, laserBeam.y2, ang + Math.PI);
     startLaserWeld();   // let svejse-syden mens strålen rammer
@@ -5862,7 +5911,7 @@ function drawPlayerBullets() {
     // MG-tracer: lille glowing dot + kort streak. Ingen flame, ingen shell.
     if (b.kind === 'mg') {
       ctx.save();
-      scaleAbout(b.x, b.y, WORLD_SCALE);
+      scaleAbout(b.x, b.y, WORLD_SCALE * (b.size || 1));   // kaliber: stoerre tracer
       ctx.globalCompositeOperation = 'lighter';
       // Streak bagud (motion blur)
       const trailLen = 12;
@@ -6013,11 +6062,14 @@ function drawPlayerBullets() {
 function drawLaserBeam() {
   if (!laserBeam.active || !player.alive || player.dying) return;
   const c = laserCharge;
+  // Tier-tykkelse: +30% pr. laser-trin — baade gloed, kerne og kontakt-gloed
+  // skalerer med, saa en HEAVY LASER laeses tydeligt som mere end en WEAK.
+  const tw = 1 + weaponTier('weapon-laser') * 0.3;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   // Ydre glød
   ctx.strokeStyle = 'rgba(255, ' + Math.round(80 + c * 120) + ', 60, ' + (0.16 + c * 0.34) + ')';
-  ctx.lineWidth = (2 + c * 5) * WORLD_SCALE;
+  ctx.lineWidth = (2 + c * 5) * WORLD_SCALE * tw;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(laserBeam.x1, laserBeam.y1);
@@ -6025,14 +6077,14 @@ function drawLaserBeam() {
   ctx.stroke();
   // Indre kerne
   ctx.strokeStyle = 'rgba(255, 240, ' + Math.round(170 + c * 70) + ', ' + (0.55 + c * 0.4) + ')';
-  ctx.lineWidth = (0.8 + c * 2.2) * WORLD_SCALE;
+  ctx.lineWidth = (0.8 + c * 2.2) * WORLD_SCALE * tw;
   ctx.beginPath();
   ctx.moveTo(laserBeam.x1, laserBeam.y1);
   ctx.lineTo(laserBeam.x2, laserBeam.y2);
   ctx.stroke();
   // Kontakt-glød paa fjenden
   if (laserBeam.hit) {
-    const r = (4 + c * 8) * WORLD_SCALE;
+    const r = (4 + c * 8) * WORLD_SCALE * tw;
     const g = ctx.createRadialGradient(laserBeam.x2, laserBeam.y2, 0, laserBeam.x2, laserBeam.y2, r);
     g.addColorStop(0, 'rgba(255, 245, 210, ' + (0.7 + c * 0.3) + ')');
     g.addColorStop(1, 'rgba(255, 120, 40, 0)');
