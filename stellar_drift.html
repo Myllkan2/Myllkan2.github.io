@@ -88,6 +88,23 @@
     font-weight: 300;
     min-width: 42px;
   }
+  /* Raket-kanistre: én pr. skud i magasinet — fyldt = klar, toemt = affyret,
+     alle toemte mens der omlades. Ligger ved HEAT-blokken saa al ammunitions-
+     status bor samme sted i HUD'en. */
+  #hud .rockets-block { margin-top: 14px; display: none; }
+  #hud .rockets-block.visible { display: block; }
+  #hud .rocket-cans { display: flex; gap: 4px; margin-top: 4px; }
+  #hud .rocket-can {
+    width: 9px;
+    height: 22px;
+    border: 1px solid rgba(255, 190, 110, 0.55);
+    border-radius: 4px 4px 2px 2px;   /* rundet top: laeses som en lille raket */
+    background: rgba(40, 30, 20, 0.45);
+  }
+  #hud .rocket-can.full {
+    background: linear-gradient(180deg, rgba(255, 220, 150, 0.95), rgba(230, 140, 60, 0.9));
+    box-shadow: 0 0 6px rgba(255, 180, 90, 0.45);
+  }
   /* HEAT-barometer (kun synligt naar MG er udstyret) */
   #hud .heat-block { margin-top: 14px; display: none; }
   #hud .heat-block.visible { display: block; }
@@ -1184,6 +1201,10 @@
     <div class="label">WEAPON</div>
     <div class="weapon-name" id="weaponName">ROCKETS</div>
   </div>
+  <div class="rockets-block" id="rocketsBlock">
+    <div class="label">ROCKETS</div>
+    <div class="rocket-cans" id="rocketCans"></div>
+  </div>
   <div class="heat-block" id="heatBlock">
     <div class="label">HEAT</div>
     <div class="heat-row">
@@ -1525,6 +1546,8 @@ const shopSubtitleEl = document.querySelector('#shop .shop-subtitle');
 const hullFillEl = document.getElementById('hullFill');
 const hullPctEl = document.getElementById('hullPct');
 const heatBlockEl = document.getElementById('heatBlock');
+const rocketsBlockEl = document.getElementById('rocketsBlock');
+const rocketCansEl = document.getElementById('rocketCans');
 const heatFillEl = document.getElementById('heatFill');
 const heatPctEl = document.getElementById('heatPct');
 const weaponBlockEl = document.getElementById('weaponBlock');
@@ -3183,9 +3206,15 @@ const WEAPON_SHORT  = { 'default': 'RKT', 'weapon-mg': 'MG', 'weapon-laser': 'LA
 // (kun ét MG muligt) og bor stadig paa player.heat/overheated. Laseren er én stråle
 // uanset. `equippedWeapon` er nu blot BASE-vaabnet (sat ved LAUNCH).
 let activeWeapons = [];          // raekkefoelge: base foerst, derefter opsamlede
-let weaponTiming = {};           // id -> { cooldown, magazine }
+let weaponTiming = {};           // id -> { cooldown, magazine, magCap }
 let weaponHudActive = false;     // vaaben-HUD vises kun i rejse-kampene
-function freshTiming() { return { cooldown: 0, magazine: 5 }; }
+// 'default' og 'weapon-rl' er begge "ROCKETS" for spilleren — en raket-pickup
+// oven i aktive raketter giver +1 kanister (stoerre magasin resten af kampen)
+// i stedet for endnu en sideloebende affyringsrampe ("RKT + RKT").
+const ROCKET_IDS = ['default', 'weapon-rl'];
+const ROCKET_MAG_MAX = 10;       // HUD-raekken skal kunne vaere der
+function freshTiming() { return { cooldown: 0, magazine: 5, magCap: 5 }; }
+function activeRocketId() { return activeWeapons.find(w => ROCKET_IDS.includes(w)); }
 
 // Nyt mission-start: nulstil til kun base-vaabnet.
 function startMissionWeapons() {
@@ -3199,6 +3228,18 @@ function startMissionWeapons() {
 }
 // Opsamlet vaaben lægges OVENI (fyrer sideloebende). Ingen dubletter.
 function addActiveWeapon(id) {
+  // Raket-dublet: +1 kanister paa det aktive raket-vaaben (ogsaa ladt med det
+  // samme). Ved cap toppes magasinet bare op, saa pickup'et aldrig er spildt.
+  if (ROCKET_IDS.includes(id)) {
+    const cur = activeRocketId();
+    if (cur) {
+      const ts = weaponTiming[cur];
+      if (ts.magCap < ROCKET_MAG_MAX) { ts.magCap++; ts.magazine++; }
+      else ts.magazine = ts.magCap;
+      refreshWeaponHUD();
+      return;
+    }
+  }
   if (activeWeapons.includes(id)) return;
   activeWeapons.push(id);
   weaponTiming[id] = freshTiming();
@@ -3220,6 +3261,25 @@ function refreshWeaponHUD() {
   weaponNameEl.classList.toggle('boosted', activeWeapons.length > 1);
 }
 
+// Raket-kanistre: én pr. plads i magasinet, fyldt = klar. Kaldes hver frame fra
+// loop'en, men roerer kun DOM naar magasin-tilstanden faktisk aendrer sig.
+let rocketCansState = '';
+function updateRocketHUD() {
+  const cur = activeRocketId();
+  const show = !!cur && weaponBlockEl.classList.contains('visible');
+  rocketsBlockEl.classList.toggle('visible', show);
+  if (!show) { rocketCansState = ''; return; }
+  const ts = weaponTiming[cur];
+  const state = ts.magCap + ':' + ts.magazine;
+  if (state === rocketCansState) return;
+  rocketCansState = state;
+  let html = '';
+  for (let i = 0; i < ts.magCap; i++) {
+    html += '<div class="rocket-can' + (i < ts.magazine ? ' full' : '') + '"></div>';
+  }
+  rocketCansEl.innerHTML = html;
+}
+
 // Drop loot fra en draebt fjende — ogsaa i tutorialen, saa pickups/power-ups
 // laeres FOER de betyder noget i rejse-kampene. Moent altid; vaaben dropper
 // GARANTERET ved missionens foerste kill, derefter med WEAPON_DROP_CHANCE.
@@ -3229,8 +3289,15 @@ function spawnDrops(x, y, vx, vy, coinCount = 1) {
   for (let c = 0; c < coinCount; c++) spawnPickup(x, y, vx, vy, 'coin', null);
   const guaranteed = !firstKillWeaponDropped;
   if (guaranteed || Math.random() < WEAPON_DROP_CHANCE) {
-    // Drop kun vaaben spilleren ikke allerede har aktivt (ingen nytteloese dubletter).
-    const pool = DROP_WEAPONS.filter(w => !activeWeapons.includes(w));
+    // Drop kun vaaben spilleren ikke allerede har aktivt (ingen nytteloese
+    // dubletter) — undtagen raketter, som stables (+1 kanister) indtil cap.
+    const pool = DROP_WEAPONS.filter(w => {
+      if (ROCKET_IDS.includes(w)) {
+        const cur = activeRocketId();
+        return !cur || weaponTiming[cur].magCap < ROCKET_MAG_MAX;
+      }
+      return !activeWeapons.includes(w);
+    });
     const w = pool[Math.floor(Math.random() * pool.length)];
     if (w) { spawnPickup(x, y, vx, vy, 'weapon', w); firstKillWeaponDropped = true; }
   }
@@ -4390,7 +4457,7 @@ function update(now) {
     if (id === 'weapon-laser' || id === 'weapon-mg') continue;
     const ts = weaponTiming[id];
     if (ts.cooldown > 0) ts.cooldown -= dt;
-    if (ts.magazine === 0 && ts.cooldown <= 0) ts.magazine = 5;   // reload faerdig
+    if (ts.magazine === 0 && ts.cooldown <= 0) ts.magazine = ts.magCap;   // reload faerdig
     if (trigger && ts.cooldown <= 0 && ts.magazine > 0) {
       const useRusty = (id === 'weapon-rusty');
       const burst = Math.min(moodFx().fireMult, ts.magazine);   // Angry: fireMult skud
@@ -6315,6 +6382,7 @@ function loop(now) {
   const showLegBar = player.alive && !player.dying &&
                      (!overlayActive() || lootGraceActive);
   legProgressEl.classList.toggle('visible', showLegBar);
+  updateRocketHUD();
   if (showLegBar) {
     const frac = hasGraduated ? pirateKills / currentLeg().killTarget : score / GRADUATION_SCORE;
     legProgressFillEl.style.width = (Math.min(1, frac) * 100) + '%';
