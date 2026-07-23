@@ -105,9 +105,15 @@
     background: linear-gradient(180deg, rgba(255, 220, 150, 0.95), rgba(230, 140, 60, 0.9));
     box-shadow: 0 0 6px rgba(255, 180, 90, 0.45);
   }
-  /* HEAT-barometer (kun synligt naar MG er udstyret) */
+  /* HEAT-barometer (kun synligt naar MG er udstyret). Kaliber-teksten ved
+     siden af HEAT viser MG'ens progression — vaaben-navnet holdes rent. */
   #hud .heat-block { margin-top: 14px; display: none; }
   #hud .heat-block.visible { display: block; }
+  #hud .mg-caliber {
+    margin-left: 7px;
+    color: rgba(255, 200, 110, 0.85);
+    letter-spacing: 1.5px;
+  }
   #hud .heat-row {
     display: flex;
     align-items: center;
@@ -1206,7 +1212,7 @@
     <div class="rocket-cans" id="rocketCans"></div>
   </div>
   <div class="heat-block" id="heatBlock">
-    <div class="label">HEAT</div>
+    <div class="label">HEAT<span class="mg-caliber" id="mgCaliber"></span></div>
     <div class="heat-row">
       <div class="heat-bar"><div class="heat-fill" id="heatFill"></div></div>
       <span class="heat-pct" id="heatPct">0%</span>
@@ -1548,6 +1554,7 @@ const hullPctEl = document.getElementById('hullPct');
 const heatBlockEl = document.getElementById('heatBlock');
 const rocketsBlockEl = document.getElementById('rocketsBlock');
 const rocketCansEl = document.getElementById('rocketCans');
+const mgCaliberEl = document.getElementById('mgCaliber');
 const heatFillEl = document.getElementById('heatFill');
 const heatPctEl = document.getElementById('heatPct');
 const weaponBlockEl = document.getElementById('weaponBlock');
@@ -3271,6 +3278,9 @@ function refreshWeaponHUD() {
   const show = weaponHudActive || activeWeapons.length > 1;
   weaponBlockEl.classList.toggle('visible', show);
   heatBlockEl.classList.toggle('visible', show && activeWeapons.includes('weapon-mg'));
+  // Kaliberen staar ved HEAT-baren (ikke i vaaben-navnet — det holdes rent).
+  mgCaliberEl.textContent = activeWeapons.includes('weapon-mg')
+    ? MG_CALIBERS[weaponTier('weapon-mg')] : '';
   if (!activeWeapons.length) { weaponNameEl.textContent = ''; return; }
   weaponNameEl.textContent = activeWeapons.length === 1
     ? weaponDisplayName(activeWeapons[0])
@@ -3282,14 +3292,14 @@ function refreshWeaponHUD() {
 function weaponDisplayName(id) {
   const ts = weaponTiming[id] || {};
   if (id === 'weapon-laser') return LASER_TIERS[ts.tier || 0] + ' LASER';
-  if (id === 'weapon-mg')    return 'MACHINE GUN ' + MG_CALIBERS[ts.tier || 0];
+  if (id === 'weapon-mg')    return 'MACHINE GUN';   // kaliberen staar ved HEAT-baren
   if (id === 'weapon-rusty') return ((ts.guns || 1) > 1 ? ts.guns + '× ' : '') + 'RUSTY SPACEGUN';
   return WEAPON_NAMES[id] || id;
 }
 function weaponShortName(id) {
   const ts = weaponTiming[id] || {};
   if (id === 'weapon-laser') return 'LAS' + '+'.repeat(ts.tier || 0);
-  if (id === 'weapon-mg')    return 'MG' + '+'.repeat(ts.tier || 0);
+  if (id === 'weapon-mg')    return 'MG';   // kaliberen staar ved HEAT-baren
   if (id === 'weapon-rusty') return ((ts.guns || 1) > 1 ? ts.guns + '×' : '') + 'RST';
   return WEAPON_SHORT[id] || id;
 }
