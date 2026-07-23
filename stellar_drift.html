@@ -160,7 +160,7 @@
      midt i synsfeltet og daekkede kampen. Topbaandet er uden for flyvebanen. */
   #tutorial {
     position: fixed;
-    top: 68px;
+    top: 82px;   /* lige under level-progress-baren (68px + 7px + kant) */
     left: 50%;
     transform: translateX(-50%);
     text-align: center;
@@ -6294,15 +6294,16 @@ function loop(now) {
   // gennemsigtigt — samme stil som mobil-udgaven — saa man kan se rumskibet
   // flyve bag det i øverste højre hjørne.
   document.body.classList.toggle('combat', !overlayActive());
-  // Level-progress-bar: kun under rejse-kampe (post-graduation) — tutorialen har
-  // sit eget maal. Under loot-gracen staar den fuld mens piraterne flygter
-  // (overlayActive() er sand dér pga. ambushWon, deraf undtagelsen).
-  const showLegBar = hasGraduated && player.alive && !player.dying &&
+  // Level-progress-bar: rejse-kampe fyldes med kills mod stoppets maal; i
+  // simulationen fyldes den med score mod graduation (1000 — skal matche
+  // triggerVictory-checket). Under loot-gracen staar den fuld mens piraterne
+  // flygter (overlayActive() er sand dér pga. ambushWon, deraf undtagelsen).
+  const showLegBar = player.alive && !player.dying &&
                      (!overlayActive() || lootGraceActive);
   legProgressEl.classList.toggle('visible', showLegBar);
   if (showLegBar) {
-    const pct = Math.min(1, pirateKills / currentLeg().killTarget) * 100;
-    legProgressFillEl.style.width = pct + '%';
+    const frac = hasGraduated ? pirateKills / currentLeg().killTarget : score / 1000;
+    legProgressFillEl.style.width = (Math.min(1, frac) * 100) + '%';
   }
   requestAnimationFrame(loop);
 }
