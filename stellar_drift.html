@@ -527,6 +527,23 @@
   #titleScreen.visible {
     opacity: 1;
   }
+  /* START NEW GAME: vises kun naar der findes et gemt spil. pointer-events
+     eksplicit — titel-overlayet betjenes ellers kun med taster/touch. */
+  #newGameBtn {
+    display: none;
+    margin-top: 26px;
+    background: none;
+    border: 1px solid rgba(150, 180, 220, 0.35);
+    color: rgba(150, 180, 220, 0.75);
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 4px;
+    padding: 10px 22px;
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  #newGameBtn.visible { display: inline-block; }
+  #newGameBtn:hover { border-color: rgba(200, 60, 60, 0.6); color: rgba(255, 150, 150, 0.9); }
   #victory.visible {
     opacity: 1;
     transition: opacity 1.2s ease-in 0.2s;  /* roligt fade-in efter sejr */
@@ -1265,6 +1282,7 @@
     Good Luck!
   </div>
   <div class="prompt">PRESS ANY KEY TO START</div>
+  <button id="newGameBtn">START NEW GAME</button>
 </div>
 
 <div id="gameOver">
@@ -2555,9 +2573,13 @@ window.addEventListener('keydown', e => {
     if (isMovementKey) e.preventDefault();
     return;
   }
-  // Titelskaerm: foerste tast unlock'er audio + starter spillet.
+  // Titelskaerm: foerste tast unlock'er audio + starter spillet. Med et gemt
+  // spil er N genvej til nyt-spil-flowet (samme to-trins-bekraeftelse som knappen).
   if (titleVisible) {
-    if (!e.repeat) startGameFromTitle();
+    if (!e.repeat) {
+      if (resumeAvailable && e.code === 'KeyN') armOrStartNewGame();
+      else startGameFromTitle();
+    }
     if (isMovementKey) e.preventDefault();
     return;
   }
@@ -2727,6 +2749,7 @@ pauseScreenEl.addEventListener('click', resumeGame);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     pauseGame();       // no-op hvis et andet overlay allerede fryser spillet
+    saveProgress();    // Android kan draebe TWA'en i baggrunden — gem pungen nu
     pauseAllMusic();   // ogsaa titel/shop/game-over-musik — intet spiller i baggrunden
     if (!familyCutsceneVideo.paused) familyCutsceneVideo.pause();
     stopThrust();
@@ -2770,6 +2793,9 @@ window.addEventListener('touchstart', e => {
   // Lyd-toggles haandterer deres eget 'click' — et tryk paa dem maa ikke
   // samtidig starte spillet fra titelskaermen eller genoptage fra pause.
   if (e.target.closest && e.target.closest('#audioToggles')) return;
+  // START NEW GAME-knappen haandterer sit eget 'click' — et tryk paa den maa
+  // ikke samtidig taelle som "fortsaet" og lukke titelskaermen bag sig.
+  if (e.target.closest && e.target.closest('#newGameBtn')) return;
   if (advanceOverlayOnTouch()) e.preventDefault();
 }, { passive: false });
 
@@ -3675,6 +3701,9 @@ function restartGame() {
     playGameMusic();
   }
   stopThrust();   // defensiv: ingen lingering thrust efter restart
+  // Pungen overlever doed i sessionen (moenter samlet i den tabte kamp beholdes)
+  // — spejl det paa disk, saa app-luk efter en doed ikke ruller pungen tilbage.
+  saveProgress();
 }
 
 // ===== SHOP / QUARTERMASTER (phase 2 trin 1) =====================================
@@ -3711,6 +3740,7 @@ function openShop() {
   shopSubtitleEl.textContent = legLabel() + '  ·  ' + currentLeg().name;
   shopVisible = true;
   shopEl.classList.add('visible');
+  saveProgress();   // stationen er checkpointet — fang ogsaa flags sat paa vejen hertil
   // Shoppen er en rolig forberedelsesfase. Naar baggrunds-playlisten er aktiv
   // (efter foerste family-cutscene) lader vi den loebe uforstyrret videre — intet
   // musik-skift. Foer da: foerste shop-besoeg efter graduation skifter til
@@ -3737,6 +3767,7 @@ function buyItem(id, cost, slot) {
       if (id === STARTER_SHIP) return;
       owned.ship = null;
       coins += cost;
+      saveProgress();
       updateShopUI();
       return;
     }
@@ -3744,6 +3775,7 @@ function buyItem(id, cost, slot) {
     if (coins < cost) return;
     owned.ship = id;
     coins -= cost;
+    saveProgress();
     updateShopUI();
     return;
   }
@@ -3753,12 +3785,14 @@ function buyItem(id, cost, slot) {
   if (idx !== -1) {
     list.splice(idx, 1);
     coins += cost;
+    saveProgress();
     updateShopUI();
     return;
   }
   if (coins < cost) return;
   list.push(id);
   coins -= cost;
+  saveProgress();
   updateShopUI();
 }
 
@@ -3806,6 +3840,7 @@ shopLaunchBtn.addEventListener('click', () => {
   const WEAPON_PRIORITY = ['weapon-mg', 'weapon-rl', 'weapon-laser', 'weapon-rusty'];
   const eq = WEAPON_PRIORITY.find(w => owned.weapons.includes(w));
   if (eq) equippedWeapon = eq;
+  saveProgress();   // udrustningen er valgt — gem den sammen med pungen
   // Vis ambush-cutscenen foer kampen — teksten skifter pr. rejse-stop (sektor +
   // STOP x OF N + leg'ets egen historie), saa hvert stop foeles som et nyt sted.
   const leg = currentLeg();
@@ -3958,6 +3993,7 @@ function triggerVictory() {
   // Markér graduation: alle senere missioner kører paa fuld svaerhedsgrad,
   // ogsaa hvis spilleren doer og restarter. Overlever restartGame() bevidst.
   hasGraduated = true;
+  saveProgress();   // foerste gemme-vaerdige milepael — herfra genoptages ved stationen
   stopGameMusic();
   playTitleMusic();
   stopThrust();
@@ -4011,6 +4047,7 @@ function triggerAmbushWin() {
   } else {
     ambushExpiredEl.textContent = '';
   }
+  saveProgress();   // stoppet er ryddet: nyt legIndex + dusoer skal overleve app-luk
   ambushWinEl.classList.add('visible');
   // Cap levetiden paa eksisterende fjende-raketter saa de blaeser ud inden for
   // et sekund — de er nu harmloese, men skal heller ikke svaeve i evig tid.
@@ -4036,6 +4073,7 @@ function triggerHomeEnding() {
     if (b.life > 900) b.life = 900;
     b.burnerOn = false;
   }
+  saveProgress();   // dusoeren fra sidste hjemme-stop skal overleve app-luk
   homeEndingEl.classList.add('visible');
   setTimeout(() => { ambushInputReady = true; }, 4800);
 }
@@ -4079,6 +4117,7 @@ function triggerVoyageEnd() {
     if (b.life > 900) b.life = 900;
     b.burnerOn = false;
   }
+  saveProgress();   // dusoeren fra sidste Betelgeuse-stop skal overleve app-luk
   demoEndEl.classList.add('visible');
   setTimeout(() => { ambushInputReady = true; }, 4800);
 }
@@ -4238,9 +4277,110 @@ familyCutsceneVideo.addEventListener('timeupdate', () => {
   setFamilyCutsceneSubtitle(idx);
 });
 
+// ============================================================================
+// SAVE / FREMDRIFT (phase 4) — vedvarende progression paa tvaers af sessioner
+// ============================================================================
+// Kun META-fremdriften gemmes (pung, ejede items, rejse-stop, engangs-flags) —
+// aldrig midt-i-kamp-tilstand. Checkpoint-semantikken er "senest naaede station":
+// der gemmes ved koeb/launch/stop-skift og naar appen ryger i baggrunden
+// (Android kan draebe TWA'en naar som helst). localStorage kan smide i privat
+// browsing — alt er try/catch'et, spillet koerer da bare videre uden save.
+const SAVE_KEY = 'stellardrift.save.v1';
+
+// Saettes naar spilleren bekraefter "nyt spil": reload'en udloeser visibility-
+// change (hidden) -> saveProgress, som ellers ville genskrive det netop
+// slettede save fra hukommelsen, foer den friske side naar at starte.
+let saveDisabled = false;
+
+function saveProgress() {
+  if (saveDisabled) return;
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      v: 1,
+      coins: coins,
+      owned: owned,
+      legIndex: legIndex,
+      hasGraduated: hasGraduated,
+      tutorialCompleted: tutorialCompleted,
+      mgRetired: mgRetired,
+      familyCutscenePlayed: familyCutscenePlayed,
+      equippedShip: equippedShip,
+      equippedWeapon: equippedWeapon
+    }));
+  } catch (_) {}
+}
+function clearProgress() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (_) {}
+}
+
+// Indlaeses ved boot. Kun post-graduation saves genoptages — alt foer graduation
+// er alligevel en frisk start, og tutorialen skal ikke kunne efterlade et halvt
+// save. Defensiv validering: et korrupt save maa aldrig kunne saette spillet i
+// en umulig tilstand (fx legIndex uden for ALL_LEGS eller en pung paa NaN).
+let resumeAvailable = false;
+(function loadProgress() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (_) {}
+  if (!s || s.v !== 1 || !s.hasGraduated) return;
+  coins = Math.max(0, s.coins | 0);
+  legIndex = Math.min(Math.max(s.legIndex | 0, 0), ALL_LEGS.length - 1);
+  hasGraduated = true;
+  tutorialCompleted = true;
+  mgRetired = !!s.mgRetired;
+  familyCutscenePlayed = !!s.familyCutscenePlayed;
+  const o = s.owned || {};
+  const strList = a => Array.isArray(a) ? a.filter(x => typeof x === 'string') : [];
+  owned = {
+    ship: (typeof o.ship === 'string') ? o.ship : null,
+    weapons: strList(o.weapons),
+    accessories: strList(o.accessories),
+    cleaning: strList(o.cleaning),
+    upgrades: strList(o.upgrades)
+  };
+  if (typeof s.equippedShip === 'string') equippedShip = s.equippedShip;
+  if (typeof s.equippedWeapon === 'string') equippedWeapon = s.equippedWeapon;
+  resumeAvailable = true;
+})();
+
+// Titelskaermen afspejler et gemt spil: fortsaet-tekst + START NEW GAME-knap.
+// Nyt spil kraever to tryk (arm -> bekraeft) saa et vildfarent klik ikke kan
+// slette timers fremdrift. Selve nulstillingen er slet-save + reload — en frisk
+// side er den eneste 100% rene nulstilling af al script-state.
+const newGameBtnEl = document.getElementById('newGameBtn');
+let newGameArmed = false;
+function armOrStartNewGame() {
+  if (!newGameArmed) {
+    newGameArmed = true;
+    newGameBtnEl.textContent = 'ERASE SAVE AND START OVER?';
+    return;
+  }
+  saveDisabled = true;   // reload'ens visibilitychange maa ikke gen-gemme det slettede
+  clearProgress();
+  location.reload();
+}
+newGameBtnEl.addEventListener('click', armOrStartNewGame);
+if (resumeAvailable) {
+  titleEl.querySelector('.subtitle').textContent = 'THE JOURNEY CONTINUES';
+  titleEl.querySelector('.briefing').innerHTML =
+    'Welcome back, <strong>Brian</strong>. Your ship and coin are waiting at the station.<br><br>'
+    + 'Next stop: <strong>' + currentLeg().name + '</strong> — ' + legLabel() + '.';
+  titleEl.querySelector('.prompt').textContent = 'PRESS ANY KEY TO CONTINUE';
+  newGameBtnEl.classList.add('visible');
+}
+
 function startGameFromTitle() {
   titleVisible = false;
   titleEl.classList.remove('visible');
+  // Gemt spil: spring simulation/tutorial over og genoptag ved stationen —
+  // shoppen ER checkpointet, og naeste LAUNCH flyver det gemte stop. Musikken
+  // klarer openShop selv (titelmusikken faar lov at loebe videre).
+  if (resumeAvailable) {
+    brianStartMood = BRIAN_DEFAULT;
+    setBrianMood(BRIAN_DEFAULT);
+    openShop();
+    lastTime = performance.now();
+    return;
+  }
   // Ny gennemspilning: family-cutscenen er igen i spil (spilles én gang naar foerste
   // baghold er vundet), og humøret starter forfra i Content (sorgen kommer foerst efter).
   familyCutscenePlayed = false;
