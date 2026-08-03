@@ -3803,6 +3803,12 @@ function restartGame() {
   // Simulation faar ~6s grace foer foerste boelge saa spilleren kan vaenne sig
   // til kontrollerne. Post-shop kommer angrebene hurtigt — som foer.
   nextEnemyTime = hasGraduated ? 3000 : 6000;
+  // Boss-stop: flagskibet sejler ind med det samme; eskorte-boelgerne venter,
+  // saa spilleren naar at MOEDE skibet foer kaosset starter.
+  if (hasGraduated && currentLeg().boss) {
+    spawnBoss();
+    nextEnemyTime = 14000;
+  }
   gameOverEl.classList.remove('visible');
   victoryEl.classList.remove('visible');
   victoryVisible = false;
@@ -4620,6 +4626,86 @@ function spawnEnemy() {
 }
 
 // ============================================================================
+// BOSS: WARDEN'S EYE (kapitel 2-finalen)
+// ============================================================================
+// Skibet der ejer boernene i vaerftet: ét stort proceduralt skrog (kernen —
+// "Oejet") med tre batteri-taarne laast til skroget. Alle fire er almindelige
+// entries i enemies[], saa skade, tiers, eksplosioner, laser og drops genbruges
+// 1:1. Kernen er usaarlig (ricochet) til alle tre taarne er doede — saa aabner
+// Oejet som endeligt maal. Ingen HP-bar: skaden LAESES paa skibet (crack/fire),
+// og progress-baren taeller dele (killTarget = 4).
+const BOSS_TURRET_COUNT = 3;
+// Taarn-positioner i skrog-lokale enheder (x = fremad); ganges med WORLD_SCALE
+// naar de laases til kernen. To forreste skulder-batterier + ét agter.
+const BOSS_TURRET_OFFSETS = [[64, -34], [64, 34], [-58, 0]];
+let bossTurretsDown = 0;
+
+function spawnBoss() {
+  bossTurretsDown = 0;
+  // Over spilleren, lige uden for view — skibet SEJLER ind i stedet for at staa der.
+  const bx = player.x, by = player.y - 620;
+  const mk = extra => Object.assign({
+    x: bx, y: by, vx: 0, vy: 18,
+    angle: 0, aimAngle: Math.PI / 2,
+    hullType: 0, turretType: 0,          // ubrugt af boss-tegningen; holder faelles kode tryg
+    hullAngle: Math.PI / 2,              // naesen mod spilleren fra start
+    heavy: true,                          // batterierne fyrer eskorte-klasse missiler
+    scale: 1, radius: 18,
+    maxHits: ENEMY_MAX_HITS, fireTier: ENEMY_FIRE_TIER,
+    hits: 0, dying: false, dyingT: 0, dyingDuration: 900,
+    damageMarks: [],
+    fireCooldown: 1200, thinkCooldown: 0, targetAngle: 0,
+    thrusting: false, thrustPower: 0
+  }, extra);
+  // Kernen foerst: enemies tegnes i array-orden, saa taarnene lander OVEN paa skroget.
+  enemies.push(mk({
+    bossCore: true, invulnerable: true,
+    // Radius er OEJETS domeomraade, ikke hele skroget — ellers ville kernens
+    // hit-cirkel daekke taarnene og aede alle kugler som ricochets. Skud der
+    // strejfer cirklen udenom domen laeses fint som panser-ricochets.
+    scale: 4, radius: 34,
+    maxHits: ENEMY_MAX_HITS * 3,          // 9 raketter naar Oejet foerst er aabent
+    fireTier: ENEMY_FIRE_TIER * 3,
+    dyingDuration: 2200,                  // finalen fortjener en laengere doedsbrand
+    heavy: false                          // kernen skyder ikke selv
+  }));
+  for (const [dx, dy] of BOSS_TURRET_OFFSETS) {
+    enemies.push(mk({
+      bossTurret: true, bossDX: dx, bossDY: dy,
+      scale: 1.8, radius: 18 * 1.8,
+      maxHits: ENEMY_MAX_HITS * 2,
+      fireTier: ENEMY_FIRE_TIER * 2,
+      fireCooldown: 1500 + Math.random() * 2500   // forskudt aabningssalve
+    }));
+  }
+}
+
+// Faelles doeds-bogfoering for alle vaaben (raketter, MG, rusty, laser) — humoer,
+// taellere og boss-faser ét sted, saa kills taeller ens uanset vaaben. Boss-stop:
+// kun boss-DELE taeller mod sejren (eskorter er stoej); tre doede batterier
+// aabner Oejet, og Oejets doed rydder stoppet.
+function registerEnemyKill(e) {
+  brianOnKill();
+  if (!hasGraduated || ambushWon) return;
+  if (currentLeg().boss) {
+    if (e.bossTurret) {
+      bossTurretsDown++;
+      pirateKills++;   // progress-baren taeller dele: 3 batterier + Oejet = killTarget 4
+      if (bossTurretsDown >= BOSS_TURRET_COUNT) {
+        const core = enemies.find(en => en.bossCore);
+        if (core) core.invulnerable = false;   // Oejet aabner
+      }
+    } else if (e.bossCore) {
+      pirateKills++;
+      triggerLegWin();
+    }
+    return;   // eskorte-kills paa boss-stoppet rykker hverken bar eller sejr
+  }
+  pirateKills++;
+  if (pirateKills >= currentLeg().killTarget) triggerLegWin();
+}
+
+// ============================================================================
 // UPDATE
 // ============================================================================
 let lastTime = performance.now();
@@ -5034,9 +5120,10 @@ function update(now) {
         spawnBigExplosion(e.x, e.y, e.vx, e.vy);
         spawnEnemyDebris(e.x, e.y, e.vx, e.vy, e.aimAngle);
         sfxBigExplosion();
-        // Eskorter er dobbelt saa meget vaerd: 2 moenter + 200 point.
-        spawnDrops(e.x, e.y, e.vx, e.vy, e.heavy ? 2 : 1);
-        score += e.heavy ? 200 : 100;
+        // Eskorter er dobbelt saa meget vaerd: 2 moenter + 200 point. Oejet
+        // (boss-kernen) er finalen: 8 moenter + 1000 point at stoevsuge op i gracen.
+        spawnDrops(e.x, e.y, e.vx, e.vy, e.bossCore ? 8 : (e.heavy ? 2 : 1));
+        score += e.bossCore ? 1000 : (e.heavy ? 200 : 100);
         scoreEl.textContent = score;
         enemies.splice(i, 1);
         // GRADUATION_SCORE point = simulationen bestaaet. Kun foer foerste graduation —
@@ -5090,6 +5177,52 @@ function update(now) {
     e.aimAngle = Math.atan2(edy, edx);
     const distToPlayer = Math.sqrt(edx*edx + edy*edy);
 
+    if (e.bossCore) {
+      // Kapitalskibet: driver TUNGT mod en ring ~350px fra spilleren — det
+      // presser uden at jage. Skroget er truslen; batterierne skyder.
+      e.thinkCooldown -= dt;
+      if (e.thinkCooldown <= 0) {
+        if (distToPlayer > 420)      e.targetAngle = e.aimAngle;
+        else if (distToPlayer < 280) e.targetAngle = e.aimAngle + Math.PI;
+        else e.targetAngle = e.aimAngle + Math.PI / 2 + (Math.random() < 0.5 ? 0 : Math.PI);
+        e.thinkCooldown = 1600 + Math.random() * 1400;
+      }
+      const BOSS_THRUST = 12, BOSS_MAX = 42;   // langsommere end alt andet i spillet — med vilje
+      e.vx += Math.cos(e.targetAngle) * BOSS_THRUST * dtSec;
+      e.vy += Math.sin(e.targetAngle) * BOSS_THRUST * dtSec;
+      const bspd = Math.sqrt(e.vx * e.vx + e.vy * e.vy);
+      if (bspd > BOSS_MAX) { e.vx = (e.vx / bspd) * BOSS_MAX; e.vy = (e.vy / bspd) * BOSS_MAX; }
+      // Naesen foelger driften ULTRA-langsomt — 200 meter stål vender ikke paa en frame.
+      if (bspd > 5) e.hullAngle = easeAngle(e.hullAngle, Math.atan2(e.vy, e.vx), 0.008);
+      e.thrusting = false;   // motorgloeden ligger i drawBossHull, ikke i faelles-flammen
+      e.x += e.vx * dtSec;
+      e.y += e.vy * dtSec;
+      wrapRelative(e);
+      // Kernen skyder ikke selv — Oejet ser, batterierne taler.
+    } else if (e.bossTurret) {
+      // Batteri laast til skroget: position = kerne + roteret offset. Doer kernen
+      // (kan kun ske efter taarnene) eller mangler den, driver taarnet frit videre.
+      const core = enemies.find(en => en.bossCore && !en.dying);
+      if (core) {
+        const ca = Math.cos(core.hullAngle), sa = Math.sin(core.hullAngle);
+        e.x = core.x + (e.bossDX * ca - e.bossDY * sa) * WORLD_SCALE;
+        e.y = core.y + (e.bossDX * sa + e.bossDY * ca) * WORLD_SCALE;
+        e.vx = core.vx; e.vy = core.vy;   // debris/moenter arver skibets drift
+        e.hullAngle = core.hullAngle;
+      } else {
+        e.x += e.vx * dtSec;
+        e.y += e.vy * dtSec;
+        wrapRelative(e);
+      }
+      e.thrusting = false;
+      // Batterierne er travlere end drone-hulls — det er dem, der baerer kampen.
+      e.fireCooldown -= dt;
+      if (e.fireCooldown <= 0 && distToPlayer < 1000) {
+        fireEnemyBullet(e);
+        e.fireCooldown = 2800 + Math.random() * 1700;
+      }
+    } else {
+
     // Simple AI: pick a direction every couple of seconds
     e.thinkCooldown -= dt;
     if (e.thinkCooldown <= 0) {
@@ -5139,6 +5272,8 @@ function update(now) {
       e.fireCooldown = 3500 + Math.random() * 2000;  // 3.5-5.5s reload
     }
 
+    }   // slut paa normal-fjende-grenen (boss-dele har egne bevaegelses-regler ovenfor)
+
     // Check collision with player bullets
     for (let j = bullets.length - 1; j >= 0; j--) {
       const b = bullets[j];
@@ -5150,6 +5285,10 @@ function update(now) {
         const lightBullet = isMG || b.kind === 'rusty';
         if (lightBullet) spawnSpark(b.x, b.y, b.angle);
         else             spawnExplosion(b.x, b.y, b.angle);
+        // Usaarlig (Oejets pansring foer batterierne er nede): kuglen er brugt,
+        // men skibet maerker den ikke — kun et ricochet fortaeller spilleren
+        // at der ikke er noget at hente her endnu.
+        if (e.invulnerable) { sfxRicochet(); continue; }
         // Damage: raket = 1 hit, MG/rusty = 1/6 hit (18 kugler droeber en fjende).
         // MG-kugler baerer deres egen dmg (kaliber-progression: +15% pr. trin).
         // e.hits er fra nu af en float.
@@ -5171,14 +5310,8 @@ function update(now) {
           // maerker for spredning af flammer over skroget.
           e.dying = true;
           e.dyingT = 0;
-          // Brian: kill taeller mod humør én op — det kraever 3 kills for ét trin.
-          brianOnKill();
-          // Ambush-mission: taeller kills og rydder stoppet ved leg'ets kill-maal.
-          // Kun post-graduation — simulationen har ingen win-condition for kills.
-          if (hasGraduated && !ambushWon) {
-            pirateKills++;
-            if (pirateKills >= currentLeg().killTarget) triggerLegWin();
-          }
+          // Faelles bogfoering: humoer, kill-taeller, boss-faser (se registerEnemyKill).
+          registerEnemyKill(e);
           for (let k = 0; k < 3; k++) {
             const ang = Math.random() * Math.PI * 2;
             const rad = 0.45 + Math.random() * 0.5;
@@ -5322,6 +5455,13 @@ function updateLaser(firing, dtSec) {
     laserBeam.x2 = ox + dx * hitDist;
     laserBeam.y2 = oy + dy * hitDist;
     laserBeam.hit = true;
+    // Usaarlig (Oejets pansring): strålen stopper paa panseret og gnistrer,
+    // men svejser ikke igennem — ingen charge-opbygning, intet at hente endnu.
+    if (hitE.invulnerable) {
+      if (Math.random() < 0.4) spawnSpark(laserBeam.x2, laserBeam.y2, ang + Math.PI);
+      stopLaserWeld();
+      return;
+    }
     // Ny fjende i strålen? Optaendingen starter forfra — som at flytte luppen.
     if (hitE !== laserTarget) { laserCharge = 0; laserTarget = hitE; }
     laserCharge = Math.min(1, laserCharge + LASER_CHARGE_RATE * dtSec);
@@ -5345,11 +5485,7 @@ function updateLaser(firing, dtSec) {
 function laserKill(e) {
   e.dying = true;
   e.dyingT = 0;
-  brianOnKill();
-  if (hasGraduated && !ambushWon) {
-    pirateKills++;
-    if (pirateKills >= currentLeg().killTarget) triggerLegWin();
-  }
+  registerEnemyKill(e);
   const A = 12, B = 11;
   for (let k = 0; k < 3; k++) {
     const a = Math.random() * Math.PI * 2;
@@ -5443,12 +5579,18 @@ function applyPlayerHit(worldNormalX, worldNormalY) {
 }
 
 function applyEnemyHit(e, worldNormalX, worldNormalY) {
+  // Usaarlig (Oejets pansring): en kollision skraber panseret, intet mere.
+  if (e.invulnerable) return;
   // worldNormalX/Y: enhedsvektor fra fjende mod player. Contact paa fjendens
   // hull er i modsat retning fra fjenden's center.
   e.hits++;
   if (e.hits >= e.maxHits) {
     e.dying = true;
     e.dyingT = 0;
+    // Ram-kills taeller bevidst IKKE mod leg-maalet (ingen registerEnemyKill her
+    // normalt) — men boss-DELE skal altid bogfoeres, ellers aabner Oejet aldrig
+    // og kampen laaser. Boss-grenen i registerEnemyKill haandterer resten.
+    if (currentLeg().boss && (e.bossTurret || e.bossCore)) registerEnemyKill(e);
     const A = 12, B = 11;
     for (let k = 0; k < 3; k++) {
       const ang = Math.random() * Math.PI * 2;
@@ -6149,7 +6291,179 @@ function drawShipPath(ox, oy) {
   ctx.closePath();
 }
 
+// ===== BOSS-TEGNING: Warden's Eye ================================================
+// Proceduralt, i samme visuelle sprog som spillerens skib (gradients, panel-
+// linier, vents) — bare STORT. Tegnes i skrog-lokale enheder og skaleres som
+// alle andre fjender (0.85 * WORLD_SCALE * e.scale), saa damage-marks, radius
+// og eksplosioner passer uden specialtilfaelde.
+function drawBossHull(e) {
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.scale(0.85 * WORLD_SCALE * e.scale, 0.85 * WORLD_SCALE * e.scale);
+
+  // Motorgloed agter — foer skroget, saa den ligger UNDER haekken.
+  ctx.save();
+  ctx.rotate(e.hullAngle);
+  ctx.globalCompositeOperation = 'lighter';
+  const eg = ctx.createRadialGradient(-21, 0, 0, -21, 0, 9);
+  eg.addColorStop(0, 'rgba(255, 140, 60, 0.55)');
+  eg.addColorStop(0.6, 'rgba(200, 60, 30, 0.25)');
+  eg.addColorStop(1, 'rgba(150, 20, 10, 0)');
+  ctx.fillStyle = eg;
+  ctx.beginPath();
+  ctx.arc(-21, 0, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.rotate(e.hullAngle);
+  // Skrog: lang, bred kile — ±19 i laengden, ±11 i bredden (samme extents-klasse
+  // som drawEnemyPath, saa hit-cirklen radius 18*scale laeses aerligt).
+  const hg = ctx.createLinearGradient(0, -11, 0, 11);
+  hg.addColorStop(0, '#3a2528');
+  hg.addColorStop(0.45, '#57383c');
+  hg.addColorStop(0.55, '#5d3d40');
+  hg.addColorStop(1, '#2a181c');
+  ctx.fillStyle = hg;
+  ctx.beginPath();
+  ctx.moveTo(19, 0);                                  // naese
+  ctx.lineTo(13, -6);
+  ctx.lineTo(4, -9);
+  ctx.lineTo(-9, -11);                                // brede skuldre agter
+  ctx.lineTo(-17, -7);
+  ctx.lineTo(-19, -3);
+  ctx.lineTo(-19, 3);
+  ctx.lineTo(-17, 7);
+  ctx.lineTo(-9, 11);
+  ctx.lineTo(4, 9);
+  ctx.lineTo(13, 6);
+  ctx.closePath();
+  ctx.fill();
+  // Kant-highlight mod Betelgeuse-lyset
+  ctx.strokeStyle = 'rgba(255, 160, 120, 0.30)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  // Panellinier — langskibs, som spillerens skrog
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.30)';
+  ctx.lineWidth = 0.35;
+  ctx.beginPath();
+  ctx.moveTo(14, -4); ctx.lineTo(-16, -5);
+  ctx.moveTo(14, 4);  ctx.lineTo(-16, 5);
+  ctx.moveTo(-3, -10); ctx.lineTo(-3, 10);
+  ctx.moveTo(7, -8);   ctx.lineTo(7, 8);
+  ctx.stroke();
+  // Vents agter
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  for (let v = -2; v <= 2; v++) ctx.fillRect(-15, v * 2.6 - 0.5, 3.5, 1);
+
+  // OEJET: pansret dom i centrum. Lukket = moerk pansring med ring; aabent
+  // (saarbart) = gloedende roed iris der pulserer — "skyd HER".
+  if (e.invulnerable) {
+    ctx.fillStyle = '#1c1216';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(160, 120, 130, 0.55)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+    // Panser-lameller hen over domen
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.lineWidth = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(-3.4, -2.6); ctx.lineTo(3.4, -2.6);
+    ctx.moveTo(-4.4, 0);    ctx.lineTo(4.4, 0);
+    ctx.moveTo(-3.4, 2.6);  ctx.lineTo(3.4, 2.6);
+    ctx.stroke();
+  } else {
+    const pulse = 0.72 + 0.28 * Math.sin(performance.now() / 180);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const ig = ctx.createRadialGradient(0, 0, 0, 0, 0, 6.5);
+    ig.addColorStop(0, 'rgba(255, 230, 210, ' + (0.95 * pulse) + ')');
+    ig.addColorStop(0.35, 'rgba(255, 90, 50, ' + (0.8 * pulse) + ')');
+    ig.addColorStop(1, 'rgba(180, 20, 10, 0)');
+    ctx.fillStyle = ig;
+    ctx.beginPath();
+    ctx.arc(0, 0, 6.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = 'rgba(255, 240, 225, ' + pulse + ')';
+    ctx.beginPath();
+    ctx.arc(0, 0, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Damage-marks i praecis samme frame som mark-projektionen i skade-koden.
+  ctx.save();
+  ctx.rotate(e.hullAngle);
+  drawDamageMarks(e);
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// Batteri-taarn: squat, pansret platform med tvillingroer der foelger aimAngle.
+// Basen sidder fast paa skroget (roterer med hullAngle), roerene sigter selv.
+function drawBossTurret(e) {
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.scale(0.85 * WORLD_SCALE * e.scale, 0.85 * WORLD_SCALE * e.scale);
+
+  // Ottekantet base i skrogets frame
+  ctx.save();
+  ctx.rotate(e.hullAngle);
+  const bg = ctx.createLinearGradient(0, -9, 0, 9);
+  bg.addColorStop(0, '#4a3034');
+  bg.addColorStop(0.5, '#63424a');
+  bg.addColorStop(1, '#33202a');
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  for (let k = 0; k < 8; k++) {
+    const a = (Math.PI / 4) * k + Math.PI / 8;
+    const px = Math.cos(a) * 9, py = Math.sin(a) * 9;
+    k === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 160, 120, 0.25)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // Tvillingroer + monteringsring mod sigtet
+  ctx.save();
+  ctx.rotate(e.aimAngle);
+  ctx.fillStyle = '#241a20';
+  ctx.fillRect(1, -3.6, 13, 2.4);   // oevre roer
+  ctx.fillRect(1, 1.2, 13, 2.4);    // nedre roer
+  ctx.fillStyle = 'rgba(255, 180, 140, 0.35)';
+  ctx.fillRect(1, -3.6, 13, 0.5);
+  ctx.fillRect(1, 1.2, 13, 0.5);
+  ctx.fillStyle = '#0d080c';
+  ctx.fillRect(13, -3.9, 1.6, 3);
+  ctx.fillRect(13, 0.9, 1.6, 3);
+  // Monteringsring
+  ctx.strokeStyle = 'rgba(200, 160, 150, 0.5)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.arc(0, 0, 4.2, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Damage-marks i taarnets skrog-frame (samme projektion som skade-koden)
+  ctx.save();
+  ctx.rotate(e.hullAngle);
+  drawDamageMarks(e);
+  ctx.restore();
+
+  ctx.restore();
+}
+
 function drawEnemy(e) {
+  // Boss-dele har deres egne procedurale tegninger — sprites er drone-hulls' sprog.
+  if (e.bossCore)   { drawBossHull(e);   return; }
+  if (e.bossTurret) { drawBossTurret(e); return; }
   ctx.save();
   ctx.translate(e.x, e.y);
   // Skalering: skroget tegnes i sit oprindelige koordinatsystem (extents ±18)
