@@ -4661,9 +4661,14 @@ function spawnBoss() {
   enemies.push(mk({
     bossCore: true, invulnerable: true,
     // Radius er OEJETS domeomraade, ikke hele skroget — ellers ville kernens
-    // hit-cirkel daekke taarnene og aede alle kugler som ricochets. Skud der
-    // strejfer cirklen udenom domen laeses fint som panser-ricochets.
-    scale: 4, radius: 34,
+    // hit-cirkel daekke taarnene og aede alle kugler som ricochets. 22 matcher
+    // det aabne Oejes gloed visuelt, saa laser-stoppet og gnisterne sidder PAA
+    // domen i stedet for at svaeve i luften ved en usynlig firkant-kant.
+    scale: 4, radius: 22,
+    // Laser-panser: bossen er langsom MED VILJE, saa laseren ville ellers faa
+    // gratis fuld charge paa den. Panseret goer raketterne til hovedvaaben og
+    // laseren til support — ikke en gratis smeltebraender.
+    laserArmor: 0.35,
     maxHits: ENEMY_MAX_HITS * 3,          // 9 raketter naar Oejet foerst er aabent
     fireTier: ENEMY_FIRE_TIER * 3,
     dyingDuration: 2200,                  // finalen fortjener en laengere doedsbrand
@@ -4672,7 +4677,10 @@ function spawnBoss() {
   for (const [dx, dy] of BOSS_TURRET_OFFSETS) {
     enemies.push(mk({
       bossTurret: true, bossDX: dx, bossDY: dy,
-      scale: 1.8, radius: 18 * 1.8,
+      // 16 (ikke 18*1.8): hit-cirklen skal sidde stramt om selve taarn-grafikken,
+      // ellers stopper laserstraalen synligt FOER metallet og ilden svaever.
+      scale: 1.8, radius: 16,
+      laserArmor: 0.35,
       maxHits: ENEMY_MAX_HITS * 2,
       fireTier: ENEMY_FIRE_TIER * 2,
       fireCooldown: 1500 + Math.random() * 2500   // forskudt aabningssalve
@@ -5468,7 +5476,9 @@ function updateLaser(firing, dtSec) {
     // Tier-multiplikator: +15% skade pr. laser-trin (WEAK -> HEAVY).
     const dps = (LASER_DPS_MIN + (LASER_DPS_MAX - LASER_DPS_MIN) * laserCharge)
                 * Math.pow(STACK_DMG_MULT, weaponTier('weapon-laser'));
-    hitE.hits += dps * dtSec;
+    // Boss-dele baerer laser-panser (laserArmor < 1): strålen bider, men smelter
+    // ikke igennem i fuldt tempo — se spawnBoss for hvorfor.
+    hitE.hits += dps * dtSec * (hitE.laserArmor || 1);
     if (Math.random() < 0.4) spawnSpark(laserBeam.x2, laserBeam.y2, ang + Math.PI);
     startLaserWeld();   // let svejse-syden mens strålen rammer
     if (hitE.hits >= hitE.maxHits - 1e-9) laserKill(hitE);
@@ -6301,60 +6311,127 @@ function drawBossHull(e) {
   ctx.translate(e.x, e.y);
   ctx.scale(0.85 * WORLD_SCALE * e.scale, 0.85 * WORLD_SCALE * e.scale);
 
-  // Motorgloed agter — foer skroget, saa den ligger UNDER haekken.
+  // Motorgloed agter — foer skroget, saa den ligger UNDER haekken. Dyb roed:
+  // alt ved Warden laeses i blod og gloedende jern, ikke venlig raket-orange.
   ctx.save();
   ctx.rotate(e.hullAngle);
   ctx.globalCompositeOperation = 'lighter';
-  const eg = ctx.createRadialGradient(-21, 0, 0, -21, 0, 9);
-  eg.addColorStop(0, 'rgba(255, 140, 60, 0.55)');
-  eg.addColorStop(0.6, 'rgba(200, 60, 30, 0.25)');
-  eg.addColorStop(1, 'rgba(150, 20, 10, 0)');
+  const eg = ctx.createRadialGradient(-21, 0, 0, -21, 0, 10);
+  eg.addColorStop(0, 'rgba(255, 70, 30, 0.6)');
+  eg.addColorStop(0.6, 'rgba(180, 25, 15, 0.28)');
+  eg.addColorStop(1, 'rgba(120, 10, 5, 0)');
   ctx.fillStyle = eg;
   ctx.beginPath();
-  ctx.arc(-21, 0, 9, 0, Math.PI * 2);
+  ctx.arc(-21, 0, 10, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
   ctx.save();
   ctx.rotate(e.hullAngle);
-  // Skrog: lang, bred kile — ±19 i laengden, ±11 i bredden (samme extents-klasse
-  // som drawEnemyPath, saa hit-cirklen radius 18*scale laeses aerligt).
+  // Skrog: drage-silhuet — spids naese, pande-spidser og to raekker savtakkede
+  // vinge-pigge. Samme extents som foer (±19 x ±11) saa hit-logikken er uaendret.
   const hg = ctx.createLinearGradient(0, -11, 0, 11);
-  hg.addColorStop(0, '#3a2528');
-  hg.addColorStop(0.45, '#57383c');
-  hg.addColorStop(0.55, '#5d3d40');
-  hg.addColorStop(1, '#2a181c');
+  hg.addColorStop(0, '#0c0508');
+  hg.addColorStop(0.42, '#3a0d14');
+  hg.addColorStop(0.58, '#42101a');
+  hg.addColorStop(1, '#080304');
   ctx.fillStyle = hg;
   ctx.beginPath();
-  ctx.moveTo(19, 0);                                  // naese
-  ctx.lineTo(13, -6);
-  ctx.lineTo(4, -9);
-  ctx.lineTo(-9, -11);                                // brede skuldre agter
-  ctx.lineTo(-17, -7);
-  ctx.lineTo(-19, -3);
-  ctx.lineTo(-19, 3);
-  ctx.lineTo(-17, 7);
-  ctx.lineTo(-9, 11);
-  ctx.lineTo(4, 9);
-  ctx.lineTo(13, 6);
+  ctx.moveTo(19, 0);          // naese
+  ctx.lineTo(13.5, -2.5);
+  ctx.lineTo(11, -5);
+  ctx.lineTo(9.5, -8.5);      // pande-spids
+  ctx.lineTo(7.5, -5.5);
+  ctx.lineTo(4, -6.5);
+  ctx.lineTo(1.5, -11);       // forreste vingespids
+  ctx.lineTo(-1.5, -7);
+  ctx.lineTo(-4.5, -8);
+  ctx.lineTo(-7.5, -11);      // bageste vingespids
+  ctx.lineTo(-9.5, -7);
+  ctx.lineTo(-14, -5.5);
+  ctx.lineTo(-17.5, -6.5);    // haek-finne
+  ctx.lineTo(-19, -2.5);
+  ctx.lineTo(-19, 2.5);
+  ctx.lineTo(-17.5, 6.5);
+  ctx.lineTo(-14, 5.5);
+  ctx.lineTo(-9.5, 7);
+  ctx.lineTo(-7.5, 11);
+  ctx.lineTo(-4.5, 8);
+  ctx.lineTo(-1.5, 7);
+  ctx.lineTo(1.5, 11);
+  ctx.lineTo(4, 6.5);
+  ctx.lineTo(7.5, 5.5);
+  ctx.lineTo(9.5, 8.5);
+  ctx.lineTo(11, 5);
+  ctx.lineTo(13.5, 2.5);
   ctx.closePath();
   ctx.fill();
-  // Kant-highlight mod Betelgeuse-lyset
-  ctx.strokeStyle = 'rgba(255, 160, 120, 0.30)';
+  // Kanten trukket op i toerret blod — silhuetten skal laeses mod det sorte rum.
+  ctx.strokeStyle = 'rgba(120, 25, 30, 0.55)';
   ctx.lineWidth = 0.5;
   ctx.stroke();
-  // Panellinier — langskibs, som spillerens skrog
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.30)';
+
+  // Gloedende soemme langs vingeroden — som lava i sprækkerne — og to smalle
+  // "oejensprækker" ved naesen, saa skibet ser vredt ud forfra.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = 'rgba(255, 45, 25, 0.32)';
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(11, -3.6); ctx.lineTo(-13, -4.6);
+  ctx.moveTo(11, 3.6);  ctx.lineTo(-13, 4.6);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255, 60, 35, 0.85)';
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.moveTo(15.6, -1.4); ctx.lineTo(12.8, -2.6);
+  ctx.moveTo(15.6, 1.4);  ctx.lineTo(12.8, 2.6);
+  ctx.stroke();
+  ctx.restore();
+
+  // Rygspyd: en raekke smaa pigge ned langs koelen agter for Oejet.
+  for (let sx = -7; sx >= -16; sx -= 3) {
+    ctx.fillStyle = '#1c0a0e';
+    ctx.beginPath();
+    ctx.moveTo(sx + 1.1, 0);
+    ctx.lineTo(sx, -1.4);
+    ctx.lineTo(sx - 1.1, 0);
+    ctx.lineTo(sx, 1.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(200, 50, 40, 0.4)';
+    ctx.lineWidth = 0.3;
+    ctx.stroke();
+  }
+
+  // Moerke panellinier + roedt gloedende vents agter
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
   ctx.lineWidth = 0.35;
   ctx.beginPath();
-  ctx.moveTo(14, -4); ctx.lineTo(-16, -5);
-  ctx.moveTo(14, 4);  ctx.lineTo(-16, 5);
-  ctx.moveTo(-3, -10); ctx.lineTo(-3, 10);
-  ctx.moveTo(7, -8);   ctx.lineTo(7, 8);
+  ctx.moveTo(9, -4.5); ctx.lineTo(9, 4.5);
+  ctx.moveTo(-2, -6.5); ctx.lineTo(-2, 6.5);
   ctx.stroke();
-  // Vents agter
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-  for (let v = -2; v <= 2; v++) ctx.fillRect(-15, v * 2.6 - 0.5, 3.5, 1);
+  for (let v = -2; v <= 2; v++) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(-15.5, v * 2.4 - 0.5, 3.2, 1);
+    ctx.fillStyle = 'rgba(255, 60, 30, 0.28)';
+    ctx.fillRect(-15.2, v * 2.4 - 0.25, 2.6, 0.5);
+  }
+
+  // Panser-kronblade omkring Oejet: en iris af seks plader — halvt maskine,
+  // halvt rovdyr. Ligger lige uden for domen (4.9-6.6) i begge Oeje-tilstande.
+  for (let k = 0; k < 6; k++) {
+    const a0 = (Math.PI / 3) * k + 0.12, a1 = a0 + Math.PI / 3 - 0.24;
+    ctx.fillStyle = '#170a0e';
+    ctx.beginPath();
+    ctx.arc(0, 0, 6.6, a0, a1);
+    ctx.arc(0, 0, 4.9, a1, a0, true);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(160, 45, 45, 0.45)';
+    ctx.lineWidth = 0.35;
+    ctx.stroke();
+  }
 
   // OEJET: pansret dom i centrum. Lukket = moerk pansring med ring; aabent
   // (saarbart) = gloedende roed iris der pulserer — "skyd HER".
@@ -6410,13 +6487,13 @@ function drawBossTurret(e) {
   ctx.translate(e.x, e.y);
   ctx.scale(0.85 * WORLD_SCALE * e.scale, 0.85 * WORLD_SCALE * e.scale);
 
-  // Ottekantet base i skrogets frame
+  // Ottekantet base i skrogets frame — samme sorte/blodroede palette som skroget
   ctx.save();
   ctx.rotate(e.hullAngle);
   const bg = ctx.createLinearGradient(0, -9, 0, 9);
-  bg.addColorStop(0, '#4a3034');
-  bg.addColorStop(0.5, '#63424a');
-  bg.addColorStop(1, '#33202a');
+  bg.addColorStop(0, '#2d0d13');
+  bg.addColorStop(0.5, '#451319');
+  bg.addColorStop(1, '#150609');
   ctx.fillStyle = bg;
   ctx.beginPath();
   for (let k = 0; k < 8; k++) {
@@ -6426,7 +6503,7 @@ function drawBossTurret(e) {
   }
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = 'rgba(255, 160, 120, 0.25)';
+  ctx.strokeStyle = 'rgba(180, 50, 45, 0.4)';
   ctx.lineWidth = 0.5;
   ctx.stroke();
   ctx.restore();
@@ -6434,17 +6511,17 @@ function drawBossTurret(e) {
   // Tvillingroer + monteringsring mod sigtet
   ctx.save();
   ctx.rotate(e.aimAngle);
-  ctx.fillStyle = '#241a20';
+  ctx.fillStyle = '#120a0c';
   ctx.fillRect(1, -3.6, 13, 2.4);   // oevre roer
   ctx.fillRect(1, 1.2, 13, 2.4);    // nedre roer
-  ctx.fillStyle = 'rgba(255, 180, 140, 0.35)';
+  ctx.fillStyle = 'rgba(255, 90, 70, 0.3)';
   ctx.fillRect(1, -3.6, 13, 0.5);
   ctx.fillRect(1, 1.2, 13, 0.5);
-  ctx.fillStyle = '#0d080c';
+  ctx.fillStyle = '#0a0507';
   ctx.fillRect(13, -3.9, 1.6, 3);
   ctx.fillRect(13, 0.9, 1.6, 3);
   // Monteringsring
-  ctx.strokeStyle = 'rgba(200, 160, 150, 0.5)';
+  ctx.strokeStyle = 'rgba(220, 80, 70, 0.5)';
   ctx.lineWidth = 0.8;
   ctx.beginPath();
   ctx.arc(0, 0, 4.2, 0, Math.PI * 2);
