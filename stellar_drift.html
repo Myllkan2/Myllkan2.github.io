@@ -380,7 +380,7 @@
      i loop'en) — samme stil som mobil-udgaven — saa rumskibet kan ses bagved. */
   #portrait { transition: opacity 0.4s ease; }
   body.combat #portrait { opacity: 0.5; }
-  #gameOver, #titleScreen, #victory, #cutscene, #ambushWin, #familyCutscene, #homeEnding, #wifeNote, #demoEnd, #pauseScreen {
+  #gameOver, #titleScreen, #victory, #cutscene, #ambushWin, #familyCutscene, #homeEnding, #wifeNote, #chapterGate, #demoEnd, #pauseScreen {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     display: flex;
@@ -817,6 +817,51 @@
     letter-spacing: 4px;
     color: rgba(190, 215, 245, 0.8);
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    animation: gov-blink 1.5s ease-in-out infinite;
+  }
+  /* Kapitel-porten: ankomsten til Ember Market efter sidste Betelgeuse-stop.
+     Gloedende roed/rav-palette — alt under Betelgeuse laeses i den doende
+     kaempestjernes lys, i kontrast til de koelige hologram-blaa overlays. */
+  #chapterGate.visible {
+    opacity: 1;
+    transition: opacity 1.6s ease-in 2.4s;   /* samme rolige timing som home-ending */
+    background: radial-gradient(ellipse at 50% 20%, rgba(60, 12, 6, 0.55), rgba(4, 4, 10, 0.92) 70%);
+  }
+  #chapterGate .title {
+    font-size: 52px;
+    letter-spacing: 16px;
+    font-weight: 300;
+    text-align: center;
+    color: rgba(255, 160, 110, 0.95);
+    text-shadow: 0 0 30px rgba(230, 90, 40, 0.6), 0 0 80px rgba(180, 40, 15, 0.4);
+    margin-bottom: 12px;
+  }
+  #chapterGate .subtitle {
+    font-size: 12px;
+    letter-spacing: 8px;
+    color: rgba(230, 160, 120, 0.6);
+    margin-bottom: 32px;
+  }
+  #chapterGate .story {
+    font-size: 15px;
+    letter-spacing: 1.5px;
+    line-height: 1.75;
+    color: rgba(245, 228, 218, 0.9);
+    max-width: 660px;
+    text-align: center;
+    margin-bottom: 38px;
+    padding: 0 40px;
+    text-shadow: 0 0 12px rgba(200, 70, 30, 0.25);
+  }
+  #chapterGate .story strong {
+    color: rgba(255, 200, 170, 0.96);
+    font-weight: 400;
+    letter-spacing: 2px;
+  }
+  #chapterGate .prompt {
+    font-size: 12px;
+    letter-spacing: 4px;
+    color: rgba(240, 190, 160, 0.75);
     animation: gov-blink 1.5s ease-in-out infinite;
   }
   /* Demo-slut: enkel, varm afrunding — tak-for-nu-tone oven paa moerket. */
@@ -1506,15 +1551,30 @@
   <div class="prompt">PRESS ANY KEY TO SET COURSE</div>
 </div>
 
-<!-- Demo-slut: vises efter HOME-endingen. Historien pauser her; spilleren kan
+<!-- Kapitel-porten: sidste Betelgeuse-stop ryddet — ankomsten til markedet.
+     Titelkort for kapitel 2; herfra fortsaetter rejsen ind i Ember Market-stoppene. -->
+<div id="chapterGate">
+  <div class="title">THE EMBER MARKET</div>
+  <div class="subtitle">STELLAR DRIFT &middot; CHAPTER TWO</div>
+  <div class="story">
+    Through the last of the escort fleet, and there it lies: the market. Pontoon harbors and auction blocks strung through the wrecks, every berth guarded, every lane watched, all of it soaked in Betelgeuse's dying red light.<br><br>
+    Somewhere in there is a ledger with two names in it.<br><br>
+    Go and read it, <strong>Brian</strong>.
+  </div>
+  <div class="prompt">PRESS ANY KEY TO ENTER THE MARKET</div>
+</div>
+
+<!-- Kapitel 2-slut: vises naar WARDEN'S EYE er ryddet. Gensynet med datteren +
+     kapitel 3-krogen (moren er sendt videre med magnatens konvoj). Spilleren kan
      flyve ruten igen med alt sit udstyr (fri leg via startNewJourney). -->
 <div id="demoEnd">
-  <div class="title">END OF DEMO</div>
-  <div class="subtitle">STELLAR DRIFT &middot; CHAPTER ONE</div>
+  <div class="title">TOGETHER</div>
+  <div class="subtitle">STELLAR DRIFT &middot; END OF CHAPTER TWO</div>
   <div class="story">
-    Betelgeuse fills the sky &mdash; and somewhere beneath that dying red light, the Kurtar markets hold everything Brian loves.<br><br>
-    This is where his story pauses &mdash; for now. The rescue continues in a coming chapter. Thank you for playing the demo &mdash; your feedback shapes what happens next.<br><br>
-    Until then, the trade lanes are still crawling with pirates&hellip; and you still have a ship.
+    The Warden's flagship burns out over the Iron Nursery, and in the sudden quiet a small shape climbs through your airlock &mdash; thinner than you remember, eyes too old for her face. But alive. <strong>Alive.</strong><br><br>
+    She doesn't cry. She looks back once at the red horizon, then up at you:<br><br>
+    <em>&ldquo;Dad&hellip; they took Mom on the big ship. The one with the golden hull. I memorized its name.&rdquo;</em><br><br>
+    The search continues &mdash; <strong>together</strong>. Her story picks up in a coming chapter. Until then, the lanes around the Ember Market are still crawling&hellip; and now there are two of you aboard.
   </div>
   <a class="rate-btn" href="https://play.google.com/store/apps/details?id=com.myllkan.stellardrift"
      target="_blank" rel="noopener"><span class="star">&#9733;</span> RATE STELLAR DRIFT</a>
@@ -1564,6 +1624,7 @@ const familyCutsceneSkipBtn = document.getElementById('familyCutsceneSkipBtn');
 const homeEndingEl = document.getElementById('homeEnding');
 const wifeNoteEl = document.getElementById('wifeNote');
 const demoEndEl = document.getElementById('demoEnd');
+const chapterGateEl = document.getElementById('chapterGate');
 const cutsceneSubtitleEl = cutsceneEl.querySelector('.subtitle');
 const cutsceneStoryEl = cutsceneEl.querySelector('.story');
 const shopSubtitleEl = document.querySelector('#shop .shop-subtitle');
@@ -1838,22 +1899,57 @@ const BETELGEUSE_LEGS = [
          + "The whole escort fleet stands between you and the surface, every hull the Kurtars can still throw.<br><br>"
          + "One more time, <strong>Brian</strong>. All the way in." }
 ];
-// Hele rejsen som ét indeks-rum: 0-2 = hjem, 3-12 = Betelgeuse. legIndex loeber
-// hen over begge; HOME-endingen + seddlen ligger som mellemspil ved graensen.
-const ALL_LEGS = HOME_LEGS.concat(BETELGEUSE_LEGS);
+// ===== KAPITEL 2: THE EMBER MARKET (post-Betelgeuse-ankomst) =====================
+// Inde i systemet: markedet selv. Roed traad: kaos -> spor -> sted -> hende.
+// Kurven fortsaetter FLADT fra kapitel 1's slutning (14-17, ikke stejlere) —
+// spaendingen skal komme fra historien og finalen, ikke fra grind. `mood` er et
+// valgfrit start-humoer for stoppet (historien styrer tonen: sorgen efter
+// ledger'en, vreden foer Warden) — laeses i restartGame.
+const CHAPTER2_LEGS = [
+  { name: 'EMBER HARBOR', killTarget: 14, cap: 10, waveMin: 5, waveSpan: 4, gapMin: 6500, gapSpan: 3500, heavyChance: 0.45,
+    story: "The market's front door: a harbor of scorched pontoons under the red glare, where slavers dock openly and questions get you killed. Your hull is scarred enough to pass for a trader's — until the harbor pickets scan your guns.<br><br>"
+         + "Fight your way to a berth, <strong>Brian</strong>. She's somewhere behind those lights." },
+  { name: 'THE CATTLE LANES', killTarget: 15, cap: 10, waveMin: 5, waveSpan: 5, gapMin: 6000, gapSpan: 3500, heavyChance: 0.45,
+    story: "Barge convoys crawl toward the auction blocks, holds full of lives. You drift alongside, reading hull numbers, looking for the one that took your family — and the lane wardens don't like ships that look too long.<br><br>"
+         + "Keep your eyes on the barges and your guns on the wardens, <strong>Brian</strong>." },
+  { name: 'AUCTION ROW', killTarget: 16, cap: 10, waveMin: 6, waveSpan: 4, gapMin: 6000, gapSpan: 3000, heavyChance: 0.50,
+    story: "The heart of the market. Every sale is chalked in a ledger, and every ledger is guarded. Somewhere in that row is a line with your wife's name, and another with your daughter's.<br><br>"
+         + "Cut down the guard and take that ledger, <strong>Brian</strong>. You need to <strong>know</strong>." },
+  { name: 'THE LEDGER', killTarget: 16, cap: 10, waveMin: 6, waveSpan: 4, gapMin: 5500, gapSpan: 3000, heavyChance: 0.55, mood: 'Grief',
+    story: "The ledger burns in your hands. Your daughter: sold to the <strong>Iron Nursery</strong> — the wreck-yards where children strip dead ships for parts. Your wife: sold three weeks ago, shipped out with a magnate's convoy, destination unlisted.<br><br>"
+         + "One trail is cold. One is <strong>here</strong>. Go get your girl, <strong>Brian</strong> — and carve through the ledger's owners on the way out." },
+  { name: 'THE IRON NURSERY', killTarget: 17, cap: 11, waveMin: 6, waveSpan: 5, gapMin: 5500, gapSpan: 3000, heavyChance: 0.55, mood: 'Grief',
+    story: "A graveyard of hulks crawling with small lights — cutting torches, held by small hands. The yard masters watch from gun-platforms. She's down there, among the wrecks, so close your hands shake on the stick.<br><br>"
+         + "Careful now, <strong>Brian</strong>. No stray shots. Not here." },
+  { name: "WARDEN'S EYE", boss: true, killTarget: 4, cap: 7, waveMin: 2, waveSpan: 2, gapMin: 9000, gapSpan: 4000, heavyChance: 0.50, mood: 'Angry',
+    story: "The Yard-Warden's flagship rises off the nursery: the ship that owns every child in the yard. Three gun batteries and an armored eye — and it has never had to fight, because everyone runs.<br><br>"
+         + "You're not running, <strong>Brian</strong>. Break its guns. Then take its eye out." }
+];
+
+// Hele rejsen som ét indeks-rum: 0-2 = hjem, 3-12 = Betelgeuse, 13-18 = kapitel 2.
+// legIndex loeber hen over alle tre; HOME-endingen + seddlen ligger som mellemspil
+// ved den foerste graense, kapitel-porten (THE EMBER MARKET) ved den anden.
+const ALL_LEGS = HOME_LEGS.concat(BETELGEUSE_LEGS).concat(CHAPTER2_LEGS);
+const CH2_START = HOME_LEGS.length + BETELGEUSE_LEGS.length;
 let legIndex = 0;
 function currentLeg() { return ALL_LEGS[Math.min(legIndex, ALL_LEGS.length - 1)]; }
 function isFinalLeg() { return legIndex >= ALL_LEGS.length - 1; }
 function isLastHomeLeg() { return legIndex === HOME_LEGS.length - 1; }
+function isLastBetelgeuseLeg() { return legIndex === CH2_START - 1; }
 // Fremdrifts-etiket til shop + cutscene: nummereres pr. delrejse (STOP x OF 3 /
-// LEVEL x OF 10), ikke globalt — spilleren taenker i kapitler, ikke i indeks.
+// LEVEL x OF 10 / STAGE x OF 5), ikke globalt — spilleren taenker i kapitler,
+// ikke i indeks. Bossen staar udenfor nummereringen: den ER finalen.
 function legLabel() {
   if (legIndex < HOME_LEGS.length) {
     return isLastHomeLeg() ? 'FINAL APPROACH'
                            : 'STOP ' + (legIndex + 1) + ' OF ' + HOME_LEGS.length;
   }
-  const n = legIndex - HOME_LEGS.length + 1;
-  return isFinalLeg() ? 'FINAL RUN' : 'LEVEL ' + n + ' OF ' + BETELGEUSE_LEGS.length;
+  if (legIndex < CH2_START) {
+    const n = legIndex - HOME_LEGS.length + 1;
+    return isLastBetelgeuseLeg() ? 'FINAL RUN' : 'LEVEL ' + n + ' OF ' + BETELGEUSE_LEGS.length;
+  }
+  const n = legIndex - CH2_START + 1;
+  return isFinalLeg() ? 'THE FINAL BATTLE' : 'STAGE ' + n + ' OF ' + (CHAPTER2_LEGS.length - 1);
 }
 // Home-ending-state: cliffhanger naar sidste stop er ryddet. Genbruger ambushWon's
 // retreat/kollisions-fri slut-tilstand, men viser sit eget overlay (ikke family-cutscenen).
@@ -1861,8 +1957,11 @@ let homeEndingVisible = false;
 // Seddel-state: konens haandskrevne besked, vises efter HOME-endingen. En tast
 // derfra saetter kursen mod Betelgeuse (legIndex -> foerste BETELGEUSE-leg + shop).
 let wifeNoteVisible = false;
-// Demo-slut: vises naar SIDSTE Betelgeuse-stop er ryddet (historien pauser her i
-// demoen). En tast derfra starter en frisk rejse med beholdt udstyr (fri leg).
+// Kapitel-port: vises naar SIDSTE Betelgeuse-stop er ryddet — ankomsten til
+// Ember Market. En tast derfra fortsaetter rejsen ind i kapitel 2-stoppene.
+let chapterGateVisible = false;
+// Kapitel 2-slut: vises naar WARDEN'S EYE (bossen) er ryddet — gensynet med
+// datteren. En tast derfra starter en frisk rejse med beholdt udstyr (fri leg).
 let demoEndVisible = false;
 // Den lejede MG er en engangs-smagsprøve i tutorialen. Naar den udløber efter
 // bagholdet saettes mgRetired=true: MG'en forsvinder fra shoppen for altid, og
@@ -2589,9 +2688,15 @@ window.addEventListener('keydown', e => {
     if (isMovementKey) e.preventDefault();
     return;
   }
-  // Demo-slut: en tast starter en frisk rejse (fri leg med beholdt udstyr).
+  // Kapitel 2-slut: en tast starter en frisk rejse (fri leg med beholdt udstyr).
   if (demoEndVisible) {
     if (!e.repeat && ambushInputReady) startNewJourney();
+    if (isMovementKey) e.preventDefault();
+    return;
+  }
+  // Kapitel-porten: en tast fortsaetter ind i Ember Market (kapitel 2).
+  if (chapterGateVisible) {
+    if (!e.repeat && ambushInputReady) enterEmberMarket();
     if (isMovementKey) e.preventDefault();
     return;
   }
@@ -2672,6 +2777,39 @@ window.addEventListener('keydown', e => {
   legIndex = HOME_LEGS.length - 1;   // sidste hjemme-stop...
   triggerHomeEnding();               // ...netop ryddet: HOME -> seddel -> Betelgeuse
   console.log('[CHEAT] Hjemkomst: HOME-ending vist — naeste stop er Betelgeuse level 1');
+});
+
+// Dev-cheat (J): spring til kapitel-porten — som om sidste Betelgeuse-stop netop
+// er ryddet. Spejler H-cheatens gates, saa kapitel 2-flowet kan testes direkte.
+window.addEventListener('keydown', e => {
+  if (e.code !== 'KeyJ' || e.repeat) return;
+  if (ambushWon) return;
+  if (!player.alive || player.dying) return;
+  if (titleVisible || victoryVisible || shopVisible || cutsceneVisible || familyCutsceneVisible || pausedVisible) return;
+  hasGraduated = true;
+  tutorialCompleted = true;
+  hideTutorial();
+  familyCutscenePlayed = true;   // engangs-events er sket i en normal gennemspilning
+  mgRetired = true;
+  legIndex = CH2_START - 1;      // sidste Betelgeuse-stop...
+  triggerChapterGate();          // ...netop ryddet: porten -> Ember Market stage 1
+  console.log('[CHEAT] Ankomst: kapitel-porten vist — naeste stop er Ember Market stage 1');
+});
+
+// Dev-cheat (K): spring direkte til boss-stoppet (WARDEN'S EYE) via shoppen.
+window.addEventListener('keydown', e => {
+  if (e.code !== 'KeyK' || e.repeat) return;
+  if (ambushWon) return;
+  if (!player.alive || player.dying) return;
+  if (titleVisible || victoryVisible || shopVisible || cutsceneVisible || familyCutsceneVisible || pausedVisible) return;
+  hasGraduated = true;
+  tutorialCompleted = true;
+  hideTutorial();
+  familyCutscenePlayed = true;
+  mgRetired = true;
+  legIndex = ALL_LEGS.length - 1;   // bossen
+  openShop();
+  console.log('[CHEAT] Boss: shoppen aabnet paa WARDEN\'S EYE — LAUNCH starter boss-kampen');
 });
 
 // DEBUG: K saetter pirate-kill-taelleren til 9, saa naeste fjende-kill triggerer
@@ -2774,6 +2912,7 @@ function advanceOverlayOnTouch() {
   if (titleVisible)        { startGameFromTitle(); return true; }
   if (victoryVisible)      { openShop(); return true; }
   if (demoEndVisible)      { if (ambushInputReady) startNewJourney(); return true; }
+  if (chapterGateVisible)  { if (ambushInputReady) enterEmberMarket(); return true; }
   if (wifeNoteVisible)     { if (ambushInputReady) departForBetelgeuse(); return true; }
   if (homeEndingVisible)   { if (ambushInputReady) showWifeNote(); return true; }
   if (ambushWon && !lootGraceActive) { if (ambushInputReady) proceedAfterAmbush(); return true; }
@@ -3627,6 +3766,10 @@ function spawnPlayer() {
 spawnPlayer();
 
 function restartGame() {
+  // Kapitel 2-stop kan baere et start-humoer (historien styrer tonen: sorgen
+  // efter ledger'en, vreden foer Warden). Saettes FOER spawnPlayer, som laeser
+  // brianStartMood. Stop uden mood-felt beholder det humoer rejsen har givet.
+  if (hasGraduated && currentLeg().mood) brianStartMood = currentLeg().mood;
   // Fuld reset af spillets tilstand.
   spawnPlayer();
   enemies.length = 0;
@@ -3672,9 +3815,12 @@ function restartGame() {
   ambushWon = false;
   ambushInputReady = false;
   lootGraceActive = false;   // gameTime nulstilles ovenfor — fristen maa ikke haenge
-  // Defensiv: home-ending/demo-slut kan staa hvis logikken kalder restartGame midt i.
+  // Defensiv: home-ending/kapitel-port/kapitel-slut kan staa hvis logikken
+  // kalder restartGame midt i.
   homeEndingEl.classList.remove('visible');
   homeEndingVisible = false;
+  chapterGateEl.classList.remove('visible');
+  chapterGateVisible = false;
   demoEndEl.classList.remove('visible');
   demoEndVisible = false;
   // Defensiv: family-cutscene kan teoretisk stadig hænge hvis logikken kalder
@@ -4018,10 +4164,12 @@ function triggerLegWin() {
 }
 
 // Loot-gracen er udloebet: sidste HJEMME-stop -> HOME-ending (+ seddel, saa
-// videre mod Betelgeuse); allersidste Betelgeuse-stop -> demo-slut; ellers
-// normal PIRATES-BREAK-OFF -> shop, og rejsen rykker ét stop frem.
+// videre mod Betelgeuse); sidste Betelgeuse-stop -> kapitel-porten (Ember
+// Market); bossen (allersidste leg) -> kapitel 2-slut; ellers normal
+// PIRATES-BREAK-OFF -> shop, og rejsen rykker ét stop frem.
 function finishLegWin() {
   if (isLastHomeLeg()) triggerHomeEnding();
+  else if (isLastBetelgeuseLeg()) triggerChapterGate();
   else if (isFinalLeg()) triggerVoyageEnd();
   else triggerAmbushWin();
 }
@@ -4106,9 +4254,34 @@ function departForBetelgeuse() {
   openShop();                    // rydder selv ambushWon-retreat-tilstanden
 }
 
-// Allersidste Betelgeuse-stop ryddet: demo-slut. Samme retreat/kollisions-fri
-// slut-tilstand som HOME-endingen, men demo-slut-overlayet direkte — det 10.
-// stops cutscene-tekst har allerede leveret selve ankomsten til Betelgeuse.
+// Sidste Betelgeuse-stop ryddet: ankomsten til Ember Market. Samme retreat/
+// kollisions-fri slut-tilstand som HOME-endingen, men kapitel-portens titelkort
+// i stedet — det 10. stops cutscene-tekst har leveret selve ankomsten.
+function triggerChapterGate() {
+  ambushWon = true;
+  chapterGateVisible = true;
+  ambushInputReady = false;
+  for (const b of enemyBullets) {
+    if (b.life > 900) b.life = 900;
+    b.burnerOn = false;
+  }
+  saveProgress();   // dusoeren fra sidste Betelgeuse-stop skal overleve app-luk
+  chapterGateEl.classList.add('visible');
+  setTimeout(() => { ambushInputReady = true; }, 4800);
+}
+
+// Fra kapitel-porten: ind i markedet — rejsen fortsaetter paa foerste kapitel
+// 2-stop, tilbage gennem shoppen som alle andre stop.
+function enterEmberMarket() {
+  chapterGateEl.classList.remove('visible');
+  chapterGateVisible = false;
+  ambushInputReady = false;
+  legIndex = CH2_START;   // foerste Ember Market-stop
+  openShop();             // rydder selv ambushWon-retreat-tilstanden + gemmer
+}
+
+// Bossen (WARDEN'S EYE) ryddet: kapitel 2-slut — gensynet med datteren. Samme
+// retreat/kollisions-fri slut-tilstand, men slut-overlayet direkte.
 function triggerVoyageEnd() {
   ambushWon = true;
   demoEndVisible = true;
@@ -4117,7 +4290,7 @@ function triggerVoyageEnd() {
     if (b.life > 900) b.life = 900;
     b.burnerOn = false;
   }
-  saveProgress();   // dusoeren fra sidste Betelgeuse-stop skal overleve app-luk
+  saveProgress();   // dusoeren fra boss-kampen skal overleve app-luk
   demoEndEl.classList.add('visible');
   setTimeout(() => { ambushInputReady = true; }, 4800);
 }
@@ -4127,6 +4300,8 @@ function triggerVoyageEnd() {
 function startNewJourney() {
   demoEndEl.classList.remove('visible');
   demoEndVisible = false;
+  chapterGateEl.classList.remove('visible');
+  chapterGateVisible = false;
   homeEndingEl.classList.remove('visible');
   homeEndingVisible = false;
   wifeNoteEl.classList.remove('visible');
