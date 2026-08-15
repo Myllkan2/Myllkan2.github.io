@@ -187,29 +187,44 @@
     left: 50%;
     transform: translateX(-50%);
     text-align: center;
-    padding: 6px 12px;
-    background: rgba(4, 10, 22, 0.72);
-    border: 1px solid rgba(120, 170, 230, 0.35);
-    border-radius: 8px;
+    padding: 13px 26px;
+    /* Kraftigere, lysende boks saa den ikke druknar paa en telefonskaerm.
+       Bliver stadig i topbaandet uden for flyvebanen + pointer-events:none. */
+    background: linear-gradient(180deg, rgba(12, 24, 46, 0.92), rgba(6, 12, 26, 0.85));
+    border: 1.5px solid rgba(150, 205, 255, 0.75);
+    border-radius: 12px;
     font-family: 'Segoe UI', sans-serif;
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.4s ease;
-    max-width: 70vw;
+    /* width:max-content saa boksen bruger den fulde tekstbredde (bred + lav) i
+       stedet for at pakke sig sammen i en hoej, smal soejle — left:50%-ankeret
+       begraenser ellers shrink-to-fit-bredden til ~50vw. max-width holder den
+       inde paa smalle skaerme. */
+    width: max-content;
+    max-width: 92vw;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55), 0 0 32px rgba(100, 160, 255, 0.5);
+    z-index: 40;
   }
   #tutorial.visible { opacity: 1; }
+  /* Pop-blink: koeres hver gang et nyt trin vises (via flashTutorial()) — bevaegelse
+     i toppen fanger oejet uden at daekke midten. translateX(-50%) beholdes i alle
+     frames saa boksen bliver centreret under animationen. */
+  #tutorial.flash { animation: tut-appear 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.25); }
   #tutorial .tut-count {
-    font-size: 8px;
+    font-size: clamp(10px, 2.9vw, 12px);
     letter-spacing: 3px;
-    color: rgba(150, 180, 220, 0.6);
-    margin-bottom: 3px;
+    color: rgba(160, 200, 245, 0.8);
+    margin-bottom: 6px;
   }
   #tutorial .tut-text {
-    font-size: 11px;
+    font-size: clamp(16px, 5.2vw, 22px);
+    font-weight: 700;
+    line-height: 1.3;
     letter-spacing: 1px;
-    color: rgba(215, 232, 255, 0.95);
-    text-shadow: 0 0 12px rgba(100, 150, 255, 0.4);
-    animation: tut-pulse 1.6s ease-in-out infinite;
+    color: rgba(228, 240, 255, 0.98);
+    text-shadow: 0 0 14px rgba(110, 165, 255, 0.55);
+    animation: tut-pulse 1.7s ease-in-out infinite;
   }
   #tutorial .tut-text kbd {
     background: rgba(255,255,255,0.08);
@@ -222,13 +237,22 @@
   }
   /* Trin fuldfoert: kort groent bekraeftelses-blink foer naeste trin vises */
   #tutorial.done .tut-text {
-    color: rgba(150, 235, 175, 0.95);
-    text-shadow: 0 0 14px rgba(80, 220, 130, 0.5);
+    color: rgba(155, 240, 180, 0.98);
+    text-shadow: 0 0 16px rgba(80, 225, 135, 0.6);
     animation: none;
   }
+  /* Rolig glued-puls paa selve teksten (glow, ikke flicker) mellem trinnene. */
   @keyframes tut-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.62; }
+    0%, 100% { text-shadow: 0 0 10px rgba(110, 165, 255, 0.40); }
+    50%      { text-shadow: 0 0 22px rgba(130, 185, 255, 0.90); }
+  }
+  @keyframes tut-appear {
+    0%   { transform: translateX(-50%) translateY(-18px) scale(0.9);
+           box-shadow: 0 8px 30px rgba(0,0,0,0.55), 0 0 0 rgba(100,160,255,0); }
+    55%  { transform: translateX(-50%) translateY(3px) scale(1.07);
+           box-shadow: 0 8px 30px rgba(0,0,0,0.55), 0 0 46px rgba(130,185,255,0.95); }
+    100% { transform: translateX(-50%) translateY(0) scale(1);
+           box-shadow: 0 8px 30px rgba(0,0,0,0.55), 0 0 32px rgba(100,160,255,0.5); }
   }
   /* --- Touch controls (kun synlige paa touch-enheder) --- */
   #touchControls { display: none; }
@@ -335,7 +359,7 @@
     position: fixed;
     top: 20px;
     right: 20px;
-    width: 35px;
+    width: 48px;
     pointer-events: none;
     font-family: 'Segoe UI', sans-serif;
     text-align: center;
@@ -352,11 +376,11 @@
     margin-right: -25px;
   }
   #portrait .frame {
-    width: 35px;
-    height: 61px;
-    border: 1px solid rgba(120, 150, 200, 0.35);
+    width: 48px;
+    height: 84px;
+    border: 1px solid rgba(140, 175, 230, 0.5);
     background: rgba(10, 20, 35, 0.4);
-    box-shadow: 0 0 12px rgba(80, 130, 200, 0.25);
+    box-shadow: 0 0 16px rgba(90, 140, 215, 0.35);
     overflow: hidden;
   }
   #portrait img {
@@ -369,17 +393,23 @@
     image-rendering: crisp-edges;
   }
   #portrait .mood {
-    margin-top: 2px;
-    color: rgba(220, 235, 255, 0.7);
-    font-size: 7px;
-    letter-spacing: 0.5px;
-    margin-left: -25px;   /* samme brede tekst-seng som .label */
-    margin-right: -25px;
+    margin-top: 5px;
+    color: rgba(238, 246, 255, 0.98);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-shadow: 0 0 10px rgba(120, 170, 255, 0.85);
+    /* Portraettet er hoejre-forankret. Hoejre-stil teksten mod rammens hoejre kant
+       og lad lange humoer-ord ("ENTHUSIASTIC") vokse mod VENSTRE ind i tomrummet,
+       saa de aldrig klippes af hoejre skaermkant. */
+    text-align: right;
+    margin-left: -90px;
+    margin-right: 0;
   }
   /* Under aktiv kamp gøres portrættet halvt gennemsigtigt (sat via body.combat
      i loop'en) — samme stil som mobil-udgaven — saa rumskibet kan ses bagved. */
   #portrait { transition: opacity 0.4s ease; }
-  body.combat #portrait { opacity: 0.5; }
+  body.combat #portrait { opacity: 0.72; }
   #gameOver, #titleScreen, #victory, #cutscene, #ambushWin, #familyCutscene, #homeEnding, #wifeNote, #chapterGate, #demoEnd, #pauseScreen {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -544,6 +574,22 @@
   }
   #newGameBtn.visible { display: inline-block; }
   #newGameBtn:hover { border-color: rgba(200, 60, 60, 0.6); color: rgba(255, 150, 150, 0.9); }
+  /* Game over: "se tutorial igen" — samme rolige look som START NEW GAME, men blaa
+     hover (ikke destruktiv/roed). Altid synlig naar game over-overlayet er fremme. */
+  #replayTutorialBtn {
+    display: inline-block;
+    margin-top: 22px;
+    background: none;
+    border: 1px solid rgba(150, 180, 220, 0.35);
+    color: rgba(150, 180, 220, 0.75);
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 4px;
+    padding: 10px 22px;
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  #replayTutorialBtn:hover { border-color: rgba(120, 190, 255, 0.6); color: rgba(190, 225, 255, 0.95); }
   #victory.visible {
     opacity: 1;
     transition: opacity 1.2s ease-in 0.2s;  /* roligt fade-in efter sejr */
@@ -1216,14 +1262,14 @@
     #victory .title  { font-size: 34px; letter-spacing: 7px; }
     #pauseScreen .title { font-size: 36px; letter-spacing: 8px; }
 
-    /* Pilot-portraet: arver base-stoerrelsen (35x61) — halvt gennemsigtigt */
+    /* Pilot-portraet: arver base-stoerrelsen (48x84) — let gennemsigtigt */
     #portrait {
       top: 12px;
       right: 12px;
-      opacity: 0.5;
+      opacity: 0.72;
     }
     #portrait .label { display: none; }   /* fjern "PILOT · BRIAN" for mindre rod */
-    #portrait .mood { font-size: 7px; letter-spacing: 0.5px; margin-top: 2px; }
+    #portrait .mood { font-size: 12px; letter-spacing: 1px; margin-top: 5px; }
 
     /* Phase-label kan rykke op naar portraettet er mindre */
     #phase { top: 95px; }
@@ -1333,6 +1379,7 @@
 <div id="gameOver">
   <div class="title">GAME OVER</div>
   <div class="prompt">PRESS ANY KEY TO RESTART</div>
+  <button id="replayTutorialBtn">REPLAY TUTORIAL</button>
 </div>
 
 <!-- Pause: knappen vises kun under aktiv kamp (body.combat). Overlayet fryser
@@ -2841,6 +2888,11 @@ canvas.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false
 // Foerste touch nogensinde aktiverer touch-mode (afsloerer knapperne, skjuler
 // tastatur-hintet). Mus/tastatur-brugere ser intet til touch-UI'et.
 let touchModeOn = false;
+// Telefon/tablet (grov peger + ingen hover) => vis touch-instruktioner i tutorialen
+// fra starten, allerede FOER foerste beroering (ellers stod der "hold W" paa en skaerm
+// uden tastatur). Touch-laptops (fin peger + hover som primaer) beholder tastatur-teksten.
+// Kun tutorial-TEKSTEN paavirkes; selve touch-UI'et taendes stadig foerst ved beroering.
+const touchPrimary = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
 function enableTouchMode() {
   if (touchModeOn) return;
   touchModeOn = true;
@@ -2935,6 +2987,9 @@ window.addEventListener('touchstart', e => {
   // START NEW GAME-knappen haandterer sit eget 'click' — et tryk paa den maa
   // ikke samtidig taelle som "fortsaet" og lukke titelskaermen bag sig.
   if (e.target.closest && e.target.closest('#newGameBtn')) return;
+  // REPLAY TUTORIAL-knappen haandterer sit eget 'click' — et tap paa den maa ikke
+  // samtidig taelle som "tryk hvor som helst = normal restart" paa game over.
+  if (e.target.closest && e.target.closest('#replayTutorialBtn')) return;
   if (advanceOverlayOnTouch()) e.preventDefault();
 }, { passive: false });
 
@@ -3606,53 +3661,89 @@ function drawPickups() {
 // ===== TUTORIAL (foerste mission / Space Academy Simulation) =======================
 // Trin-for-trin guide der fuldfoeres ved at UDFOERE handlingen — ikke ved at laese.
 // Detektionen er input-agnostisk (maaler vinkler/throttle/skud), saa den virker for
-// baade tastatur+mus og touch; kun teksterne skifter. Fjender spawner foerst naar
-// styringen er laert (trin 1-4), saa man ikke bliver skudt mens man laerer at flyve.
-// Vises kun pre-graduation, én gang pr. session; doed midt i = forfra.
+// baade tastatur+mus og touch; kun teksterne skifter. Fjender holdes tilbage mens
+// spilleren laerer at flyve/skyde, samler power-ups og laeser info (trin 0-6); ved
+// trin 7 kommer ÉN fjende, og ved trin 8 slippes horden loes mod graduation.
+// Vises kun pre-graduation, én gang pr. session; doed foer foerste kill = forfra.
 let tutorialActive = false;
 let tutorialStep = 0;
 let tutorialCompleted = false;
+// Saettes af "REPLAY TUTORIAL"-knappen paa game over: naeste restartGame koerer
+// tutorial-simulationen igen (ogsaa efter graduation) — spawn-gate + grace + ingen
+// boss imens. Ryddes ved foerste kill (updateTutorial case 7).
+let tutorialReplay = false;
 let tutRotateAccum = 0, tutThrustMs = 0, tutAimAccum = 0, tutMoodMs = 0;
+let tutWeaponsMs = 0;                       // laesetid for maskingevaer-info-trinnet
+let tutPodsSpawned = false;                 // power-up-pods lagt (trin 4, én gang)
+let tutEnemySpawned = false;                // den ene fjende spawnet (trin 7, én gang)
 let tutPrevThruster = null, tutPrevTurret = null;
-let tutSwapTimer = null;
+let tutSwapTimer = null, tutHideTimer = null;
 
 const TUTORIAL_STEPS = [
+  // 0 ROTÉR
   { desktop: 'ROTATE THE THRUSTER &mdash; hold <kbd>A</kbd> / <kbd>D</kbd>',
     touch:   'ROTATE &mdash; swing the LEFT stick around' },
+  // 1 TAEND MOTOR
   { desktop: 'IGNITE THE ENGINE &mdash; hold <kbd>W</kbd>',
     touch:   'THRUST &mdash; push the LEFT stick' },
+  // 2 SIGT
   { desktop: 'AIM &mdash; move the <kbd>MOUSE</kbd>, the turret follows',
     touch:   'AIM &mdash; push the RIGHT stick' },
-  { desktop: 'FIRE &mdash; hold <kbd>LMB</kbd>',
-    touch:   'FIRE &mdash; hold the RIGHT stick down' },
-  // Info-trin (auto-avancerer paa tid): humoer-mekanikken. Kills loefter Brians
-  // humoer, hits saenker det — og humoeret skalerer thrust/skudtakt/sigte (moodFx).
+  // 3 SKYD RAKETTER (forklarer base-vaabnet)
+  { desktop: 'FIRE YOUR ROCKETS &mdash; hold <kbd>LMB</kbd><br>hard-hitting, but limited ammo &mdash; it reloads itself',
+    touch:   'FIRE YOUR ROCKETS &mdash; hold the RIGHT stick down<br>hard-hitting, but limited ammo &mdash; it reloads itself' },
+  // 4 POWER-UP (pods lagt her; fuldfoeres naar man samler et NYT vaaben op)
+  { desktop: 'GRAB A POWER-UP &mdash; fly into a glowing pod<br>picked-up weapons stack and fire together',
+    touch:   'GRAB A POWER-UP &mdash; fly into a glowing pod<br>picked-up weapons stack and fire together' },
+  // 5 MASKINGEVAER-INFO (auto-avancerer paa laesetid)
+  { desktop: 'MACHINE GUN &mdash; rapid fire, but watch the HEAT bar<br>ease off the trigger before it overheats',
+    touch:   'MACHINE GUN &mdash; rapid fire, but watch the HEAT bar<br>ease off the trigger before it overheats' },
+  // 6 HUMOER-INFO (auto-avancerer): kills loefter humoeret, hits saenker det; humoer
+  //   skalerer thrust/skudtakt/sigte (moodFx). Peger paa den nu stoerre humoer-visning.
   { desktop: 'BRIAN&rsquo;S MOOD (top right) AFFECTS HANDLING<br>KILLS LIFT IT &mdash; GETTING HIT DROPS IT',
     touch:   'BRIAN&rsquo;S MOOD (top right) AFFECTS HANDLING<br>KILLS LIFT IT &mdash; GETTING HIT DROPS IT' },
+  // 7 FOERSTE FJENDE (præcis én spawnes; fuldfoeres ved foerste kill)
+  { desktop: 'ENEMY DRONE INBOUND &mdash; DESTROY IT',
+    touch:   'ENEMY DRONE INBOUND &mdash; DESTROY IT' },
+  // 8 GRADUATION-MAAL (horden kommer; graduation ved GRADUATION_SCORE)
   { desktop: 'DESTROY THE DRONES &mdash; reach ' + GRADUATION_SCORE + ' POINTS',
     touch:   'DESTROY THE DRONES &mdash; reach ' + GRADUATION_SCORE + ' POINTS' }
 ];
 
 function refreshTutorialText() {
   if (!tutorialActive) return;
-  tutorialCountEl.textContent = 'STEP ' + Math.min(tutorialStep + 1, TUTORIAL_STEPS.length) + ' / ' + TUTORIAL_STEPS.length;
-  tutorialTextEl.innerHTML = touchModeOn
+  // Sidste trin er et vedvarende MAAL (reach 500), ikke en handling — skjul taelleren.
+  const isLast = tutorialStep >= TUTORIAL_STEPS.length - 1;
+  tutorialCountEl.textContent = isLast
+    ? ''
+    : 'STEP ' + Math.min(tutorialStep + 1, TUTORIAL_STEPS.length) + ' / ' + TUTORIAL_STEPS.length;
+  tutorialTextEl.innerHTML = (touchModeOn || touchPrimary)
     ? TUTORIAL_STEPS[Math.min(tutorialStep, TUTORIAL_STEPS.length - 1)].touch
     : TUTORIAL_STEPS[Math.min(tutorialStep, TUTORIAL_STEPS.length - 1)].desktop;
+}
+// Genudloeser pop-blink-animationen (klasse fjernes + reflow + tilfoejes igen).
+// Kaldes hver gang et NYT trin vises, saa bevaegelsen i toppen fanger oejet.
+function flashTutorial() {
+  if (!tutorialEl.classList.contains('visible')) return;
+  tutorialEl.classList.remove('flash');
+  void tutorialEl.offsetWidth;   // force reflow saa animationen starter forfra
+  tutorialEl.classList.add('flash');
 }
 function startTutorial() {
   tutorialActive = true;
   tutorialStep = 0;
   tutRotateAccum = 0; tutThrustMs = 0; tutAimAccum = 0; tutMoodMs = 0;
+  tutWeaponsMs = 0; tutPodsSpawned = false; tutEnemySpawned = false;
   tutPrevThruster = null; tutPrevTurret = null;
-  clearTimeout(tutSwapTimer);
+  clearTimeout(tutSwapTimer); clearTimeout(tutHideTimer);
   tutorialEl.classList.remove('done');
   refreshTutorialText();
   tutorialEl.classList.add('visible');
+  flashTutorial();
 }
 function hideTutorial() {
   tutorialActive = false;
-  clearTimeout(tutSwapTimer);
+  clearTimeout(tutSwapTimer); clearTimeout(tutHideTimer);
   tutorialEl.classList.remove('visible');
   tutorialEl.classList.remove('done');
 }
@@ -3666,16 +3757,25 @@ function advanceTutorialStep() {
   tutSwapTimer = setTimeout(() => {
     tutorialEl.classList.remove('done');
     refreshTutorialText();
+    flashTutorial();
+    // Naaet maal-trinnet (reach 500): vis det kort og skjul saa boksen, saa den ikke
+    // roder under horde-kampen. Score-HUD'en viser fremdriften videre.
+    if (tutorialStep >= TUTORIAL_STEPS.length - 1) {
+      clearTimeout(tutHideTimer);
+      tutHideTimer = setTimeout(hideTutorial, 5000);
+    }
   }, 500);
 }
-function completeTutorial() {
-  tutorialCompleted = true;
-  tutorialEl.classList.add('done');
-  tutorialCountEl.textContent = '';
-  tutorialTextEl.textContent = 'FIRST KILL CONFIRMED — REACH ' + GRADUATION_SCORE + ' POINTS';
-  sfxWeaponPickup({ volume: 0.7 });
-  clearTimeout(tutSwapTimer);
-  tutSwapTimer = setTimeout(hideTutorial, 3200);
+// Lager to power-up-pods lige ved skibet (trin 4). Begge er NYE vaabentyper, saa
+// opsamling loefter activeWeapons.length > 1 og trinnet fuldfoeres. Stationaere
+// (ingen kick) saa de er nemme at flyve ind i.
+function spawnTutorialPods() {
+  const pod = (dx, weapon) => pickups.push({
+    x: player.x + dx, y: player.y - 40, vx: 0, vy: 0,
+    kind: 'weapon', weapon, radius: 13, spin: Math.random() * Math.PI * 2
+  });
+  pod(-150, 'weapon-mg');      // maskingevaer — introducerer HEAT + rapid fire
+  pod( 150, 'weapon-laser');   // laser — viser at power-ups stabler
 }
 // Kaldes hver frame fra update-loopet. Vinkel-deltas normaliseres mod wrap.
 function updateTutorial(dt) {
@@ -3708,18 +3808,30 @@ function updateTutorial(dt) {
       if (tutAimAccum > 0.9) advanceTutorialStep();
       break;
     }
-    case 3:     // SKYD: et affyret projektil (eller laser-straale)
+    case 3:     // SKYD RAKETTER: et affyret projektil (eller laser-straale)
       if (bullets.length > 0 || laserBeam.active) advanceTutorialStep();
       break;
-    case 4:     // HUMOER (info): auto-avancer efter laesetid. Naar spilleren at
-                // draebe imens, er lektionen demonstreret — spring direkte til faerdig.
+    case 4:     // POWER-UP: laeg pods én gang, fuldfoer naar et NYT vaaben er samlet op
+      if (!tutPodsSpawned) { spawnTutorialPods(); tutPodsSpawned = true; }
+      if (activeWeapons.length > 1) advanceTutorialStep();
+      break;
+    case 5:     // MASKINGEVAER-INFO: auto-avancer efter laesetid (~7s)
+      tutWeaponsMs += dt;
+      if (tutWeaponsMs > 7000) advanceTutorialStep();
+      break;
+    case 6:     // HUMOER-INFO: auto-avancer efter laesetid (~6.5s)
       tutMoodMs += dt;
-      if (score > 0) { completeTutorial(); break; }
       if (tutMoodMs > 6500) advanceTutorialStep();
       break;
-    case 5:     // DRAEB: foerste kill (score taeller op ved eksplosionen)
-      if (score > 0) completeTutorial();
+    case 7:     // FOERSTE FJENDE: spawn præcis én; fuldfoer ved foerste kill
+      if (!tutEnemySpawned) { spawnEnemy(); tutEnemySpawned = true; }
+      if (score > 0) {
+        advanceTutorialStep();     // -> maal-trinnet (reach 500), horden slippes loes
+        tutorialCompleted = true;  // doed herefter replayer ikke hele tutorialen
+        tutorialReplay = false;
+      }
       break;
+    // trin 8 = maal (reach 500): intet at gøre her — graduation styres af score-checket
   }
 }
 
@@ -3795,17 +3907,17 @@ function restartGame() {
   }
   // Doed midt i tutorialen = forfra (styringen er tydeligvis ikke laert endnu).
   // Efter graduation / fuldfoert tutorial vises den aldrig igen.
-  if (!hasGraduated && !tutorialCompleted) startTutorial();
+  if ((!hasGraduated && !tutorialCompleted) || tutorialReplay) startTutorial();
   else hideTutorial();
   score = 0;
   scoreEl.textContent = 0;
   gameTime = 0;
   // Simulation faar ~6s grace foer foerste boelge saa spilleren kan vaenne sig
   // til kontrollerne. Post-shop kommer angrebene hurtigt — som foer.
-  nextEnemyTime = hasGraduated ? 3000 : 6000;
+  nextEnemyTime = (hasGraduated && !tutorialReplay) ? 3000 : 6000;
   // Boss-stop: flagskibet sejler ind med det samme; eskorte-boelgerne venter,
   // saa spilleren naar at MOEDE skibet foer kaosset starter.
-  if (hasGraduated && currentLeg().boss) {
+  if (hasGraduated && currentLeg().boss && !tutorialReplay) {
     spawnBoss();
     nextEnemyTime = 14000;
   }
@@ -4540,6 +4652,24 @@ function armOrStartNewGame() {
   location.reload();
 }
 newGameBtnEl.addEventListener('click', armOrStartNewGame);
+
+// "REPLAY TUTORIAL" paa game over: koer simulationen igen. tutorialCompleted
+// nulstilles midlertidigt saa updateTutorial() taeller trinnene op paa ny; flaget
+// tutorialReplay faar restartGame til at starte tutorialen + holde spawn-gaten (ogsaa
+// efter graduation). Foerste kill (updateTutorial case 7) rydder flaget + saetter
+// tutorialCompleted igen, saa normal kamp genoptages.
+const replayTutorialBtnEl = document.getElementById('replayTutorialBtn');
+function replayTutorial() {
+  tutorialReplay = true;
+  tutorialCompleted = false;
+  tutorialStep = 0;
+  restartGame();
+}
+replayTutorialBtnEl.addEventListener('click', e => {
+  e.stopPropagation();   // maa ikke ogsaa taelle som "tryk = normal restart"
+  replayTutorial();
+});
+
 if (resumeAvailable) {
   titleEl.querySelector('.subtitle').textContent = 'THE JOURNEY CONTINUES';
   titleEl.querySelector('.briefing').innerHTML =
@@ -5088,9 +5218,10 @@ function update(now) {
   // Boelge-baseret. Simulation (pre-graduation) er mere blid end post-shop, saa
   // tutorial-fasen ikke skal vaere lige saa svaer som "rigtig" kamp efter shoppen.
   // Ambush-win: ingen nye pirater spawner — dem der er paa skaermen flygter.
-  // Tutorial-gate: ingen fjender foer styringen er laert (trin 1-4 fuldfoert),
-  // saa man ikke bliver skudt mens man laerer at flyve. Trin 5 ("destroy") slipper dem loes.
-  if (!hasGraduated && tutorialActive && !tutorialCompleted && tutorialStep < 4) {
+  // Tutorial-gate: ingen AUTO-boelger mens spilleren laerer, samler power-ups og laeser
+  // info (trin 0-6). Trin 7 spawner præcis ÉN fjende manuelt (updateTutorial); trin 8
+  // ("reach 500") slipper horden loes. Gaten holder derfor auto-boelgerne indtil trin 8.
+  if ((!hasGraduated || tutorialReplay) && tutorialActive && !tutorialCompleted && tutorialStep < 8) {
     nextEnemyTime = gameTime + 2500;
   }
   if (gameTime > nextEnemyTime && !ambushWon) {
@@ -5900,6 +6031,53 @@ function render() {
   drawParticles();
 
   ctx.restore();
+
+  // Kant-pile mod fjender uden for skaermen (skaerm-koordinater, oven paa verden).
+  drawOffscreenEnemyIndicators();
+}
+
+// Viser at de SAMME droner cirkler rundt i den 3-skaerme brede bane — ikke forsvinder
+// eller teleporterer. En lille roed pil i skaermkanten peger mod hver fjende udenfor,
+// og fader med afstand. Loeser testernes "hvor flyver de hen / er det den samme?".
+function drawOffscreenEnemyIndicators() {
+  if (!player.alive || player.dying) return;
+  if (titleVisible || shopVisible || victoryVisible || pausedVisible ||
+      cutsceneVisible || familyCutsceneVisible || ambushWon) return;
+  const w = canvas.width, h = canvas.height;
+  const cx = w / 2, cy = h / 2;
+  const pad = 30;                       // afstand fra skaermkanten til pilen
+  const halfW = cx - pad, halfH = cy - pad;
+  const m = 18;                         // margin: pil foerst naar fjenden er reelt ude
+  for (const e of enemies) {
+    if (e.dying) continue;
+    const sx = e.x - camera.x;
+    const sy = e.y - camera.y;
+    if (sx > -m && sx < w + m && sy > -m && sy < h + m) continue;  // synlig -> ingen pil
+    let dx = sx - cx, dy = sy - cy;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 1) continue;
+    dx /= dist; dy /= dist;
+    // Skaeringspunkt mellem retningen og den indre kant-firkant.
+    const t = Math.min(halfW / Math.abs(dx), halfH / Math.abs(dy));
+    const ax = cx + dx * t, ay = cy + dy * t;
+    // Fade + stoerrelse efter hvor langt UDE fjenden er (naer = staerk/stor).
+    const beyond = dist - t;
+    const alpha = Math.max(0.22, Math.min(0.85, 1 - beyond / w));
+    const size = 8 + 5 * alpha;
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(Math.atan2(dy, dx));
+    ctx.beginPath();
+    ctx.moveTo(size, 0);
+    ctx.lineTo(-size * 0.75,  size * 0.7);
+    ctx.lineTo(-size * 0.75, -size * 0.7);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255, 95, 95, ' + alpha + ')';
+    ctx.shadowColor = 'rgba(255, 70, 70, 0.7)';
+    ctx.shadowBlur = 8;
+    ctx.fill();
+    ctx.restore();
+  }
 }
 
 function drawStars() {

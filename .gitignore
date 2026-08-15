@@ -27,3 +27,7 @@ signing-key-info.txt
 *.aab
 # Hele pakke-mappen, saa intet derfra kan ryge med ved et uheld
 Stellar Drift - Google Play package/
+# Lokalt Bubblewrap/Android-byggeprojekt (2026-08: erstatter PWABuilder)
+twa-build/
+# Udpakkede signeringsnoegler
+signing-key/
