@@ -294,6 +294,26 @@
     background: rgba(170, 210, 255, 0.45);
   }
   /* Sigte-joystick: spejlvendt i hoejre side, varmere farve = "vaaben" */
+  /* Skjold-knap: over sigte-joysticken. .owned goer den synlig; .spent/.broke
+     dimmer den (brugt i denne kamp / ikke raad til aktiveringen). */
+  #shieldBtn {
+    display: none;
+    position: fixed;
+    right: 52px;
+    bottom: 200px;
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    font-size: 26px;
+    background: rgba(90, 160, 255, 0.12);
+    border: 2px solid rgba(140, 200, 255, 0.55);
+    color: #bfe2ff;
+    box-shadow: 0 0 16px rgba(90, 160, 255, 0.35);
+    z-index: 50;
+    cursor: pointer;
+  }
+  body.touch.combat #shieldBtn.owned { display: block; }
+  #shieldBtn.spent, #shieldBtn.broke { opacity: 0.3; }
   #aimstick {
     position: fixed;
     right: 28px;
@@ -1343,7 +1363,7 @@
   <kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> ROTATE THRUSTER &nbsp;·&nbsp;
   <kbd>W</kbd> / <kbd>↑</kbd> IGNITE &nbsp;·&nbsp;
   <kbd>MOUSE</kbd> AIM &nbsp;·&nbsp;
-  <kbd>LMB</kbd> FIRE
+  <kbd>LMB</kbd> FIRE<span id="controlsShield" style="display:none"> &nbsp;·&nbsp; <kbd>SPACE</kbd> SHIELD</span>
 </div>
 
 <!-- Tutorial (foerste mission): trin fuldfoeres ved at UDFOERE handlingen.
@@ -1361,6 +1381,9 @@
     <div id="aimstickKnob"></div>
     <div class="stick-icon">⌖</div>
   </div>
+  <!-- Skjold-knap (touch): vises kun naar Shield Generator ejes. Dimmes naar
+       den er brugt i denne kamp eller pungen ikke kan daekke aktiveringen. -->
+  <button id="shieldBtn" aria-label="Activate shield">&#x1F6E1;</button>
 </div>
 
 <div id="titleScreen" class="visible">
@@ -1486,34 +1509,38 @@
         <span class="item-name">Rocket Motor Boost <span class="item-note">+20% thrust</span></span>
         <span class="item-cost">50 <span class="coin-pip"></span></span>
       </div>
+      <div class="item" data-item="up-shield" data-cost="100" data-slot="upgrade">
+        <span class="item-name">Shield Generator <span class="item-note">2s bullet bubble &mdash; 1 use per battle, 20 coins per use</span></span>
+        <span class="item-cost">100 <span class="coin-pip"></span></span>
+      </div>
     </div>
     <!-- Nye kategorier (phase 2+): kosmetiske/komfort-opgraderinger til rummet.
          Items matcher detaljer i billedet (hylder, knagerække, tekøkken/vask). -->
     <div class="category">
       <div class="category-title">ACCESSORIES</div>
       <div class="item" data-item="acc-shelves" data-cost="20" data-slot="accessory">
-        <span class="item-name">Storage Shelves</span>
+        <span class="item-name">Storage Shelves <span class="item-note">+1 rocket in the magazine</span></span>
         <span class="item-cost">20 <span class="coin-pip"></span></span>
       </div>
       <div class="item" data-item="acc-teakit" data-cost="35" data-slot="accessory">
-        <span class="item-name">Tea Kitchen Kit</span>
+        <span class="item-name">Tea Kitchen Kit <span class="item-note">mood drops 20% slower</span></span>
         <span class="item-cost">35 <span class="coin-pip"></span></span>
       </div>
       <div class="item" data-item="acc-hanger" data-cost="5" data-slot="accessory">
-        <span class="item-name">Coat Hanger</span>
+        <span class="item-name">Coat Hanger <span class="item-note">+10% hull points</span></span>
         <span class="item-cost">5 <span class="coin-pip"></span></span>
       </div>
       <div class="item" data-item="acc-seat" data-cost="15" data-slot="accessory">
-        <span class="item-name">Pilot Seat</span>
+        <span class="item-name">Pilot Seat <span class="item-note">+10% turn speed</span></span>
         <span class="item-cost">15 <span class="coin-pip"></span></span>
       </div>
       <div class="item" data-item="acc-lighting" data-cost="25" data-slot="accessory">
-        <span class="item-name">Lighting Rig</span>
+        <span class="item-name">Lighting Rig <span class="item-note">+10% fire rate</span></span>
         <span class="item-cost">25 <span class="coin-pip"></span></span>
       </div>
     </div>
     <div class="category">
-      <div class="category-title">CLEANING SERVICES</div>
+      <div class="category-title">CLEANING SERVICES <span class="item-note">a tidy ship lifts the mood &mdash; +1 starting mood per 30 spent (max +2)</span></div>
       <div class="item" data-item="clean-cockpit" data-cost="40" data-slot="cleaning">
         <span class="item-name">Cockpit Scrub-Down</span>
         <span class="item-cost">40 <span class="coin-pip"></span></span>
@@ -1523,7 +1550,7 @@
         <span class="item-cost">20 <span class="coin-pip"></span></span>
       </div>
       <div class="item" data-item="clean-hull" data-cost="60" data-slot="cleaning">
-        <span class="item-name">Hull Polish</span>
+        <span class="item-name">Hull Polish <span class="item-note">MG heats up 10% slower</span></span>
         <span class="item-cost">60 <span class="coin-pip"></span></span>
       </div>
       <div class="item" data-item="clean-floor" data-cost="15" data-slot="cleaning">
@@ -1531,7 +1558,7 @@
         <span class="item-cost">15 <span class="coin-pip"></span></span>
       </div>
       <div class="item" data-item="clean-window" data-cost="10" data-slot="cleaning">
-        <span class="item-name">Window Polish</span>
+        <span class="item-name">Window Polish <span class="item-note">+10% accuracy</span></span>
         <span class="item-cost">10 <span class="coin-pip"></span></span>
       </div>
     </div>
@@ -1660,6 +1687,8 @@ const shopEl = document.getElementById('shop');
 const coinAmountEl = document.getElementById('coinAmount');
 const shopLaunchBtn = document.getElementById('shopLaunch');
 const shopLaunchHintEl = document.getElementById('shopLaunchHint');
+const shieldBtnEl = document.getElementById('shieldBtn');
+const controlsShieldEl = document.getElementById('controlsShield');
 const cutsceneEl = document.getElementById('cutscene');
 const ambushWinEl = document.getElementById('ambushWin');
 const ambushBountyEl = document.getElementById('ambushBounty');
@@ -1730,7 +1759,8 @@ const BRIAN_STEP_UP = 2;     // 2 kills -> ét trin op (lettere optrapning)
 const BRIAN_STEP_DOWN = 3;   // 3 hits  -> ét trin ned (uaendret)
 let brianMoodProgress = 0;
 function brianOnHit() {
-  brianMoodProgress--;
+  // Tea Kitchen: hvert hit taeller kun 0.8 mod humoer-faldet (20% langsommere).
+  brianMoodProgress -= accMoodDropStep();
   if (brianMoodProgress <= -BRIAN_STEP_DOWN) {
     brianMoodProgress = 0;
     const idx = BRIAN_MOODS.indexOf(brianMood);
@@ -1809,7 +1839,8 @@ const laserBeam = { active: false, x1: 0, y1: 0, x2: 0, y2: 0, hit: false };
 function firingAngle(extraSpreadDeg = 0) {
   // extraSpreadDeg: vaaben-specifik spredning (fx Old Rusty Spaceguns skæve pibe).
   // Passes pr. vaaben nu hvor flere vaaben kan fyre sideloebende.
-  let errDeg = moodFx().aimError + extraSpreadDeg;
+  // Window Polish: rene ruder = 10% mindre samlet spredning (mood + vaaben).
+  let errDeg = (moodFx().aimError + extraSpreadDeg) * cleanAimMult();
   if (errDeg === 0) return player.turretAngle;
   const errRad = errDeg * Math.PI / 180;
   return player.turretAngle + (Math.random() * 2 - 1) * errRad;
@@ -2033,6 +2064,91 @@ const SLOT_LISTS = { weapon: 'weapons', accessory: 'accessories', cleaning: 'cle
 // gameplay direkte. Rocket Motor Boost giver +20% thrust (ganges paa accel).
 const BOOST_UPGRADE_ID = 'up-boost';
 const BOOST_MULT = 1.20;
+
+// ===== Tilbehoers- og rengoerings-buffs (shoppen mellem stoppene) ==============
+// Hvert tilbehoer giver en lille, tematisk gameplay-bonus oven i kosmetikken, saa
+// koebene faktisk maerkes. Alt laeses direkte fra `owned` (gemmes allerede i savet).
+function hasAcc(id)   { return owned.accessories.includes(id); }
+function hasClean(id) { return owned.cleaning.includes(id); }
+function accRofMult()     { return hasAcc('acc-lighting') ? 1.10 : 1; }   // Lighting Rig: +10% skudtakt
+function accRotMult()     { return hasAcc('acc-seat')     ? 1.10 : 1; }   // Pilot Seat: +10% thruster-rotation
+function accHpMult()      { return hasAcc('acc-hanger')   ? 1.10 : 1; }   // Coat Hanger: +10% skrogpoint
+function accMoodDropStep(){ return hasAcc('acc-teakit')   ? 0.8  : 1; }   // Tea Kitchen: humoer falder 20% langsommere
+function cleanHeatMult()  { return hasClean('clean-hull')   ? 1 / 1.10 : 1; } // Hull Polish: MG overopheder 10% langsommere
+function cleanAimMult()   { return hasClean('clean-window') ? 0.90 : 1; }     // Window Polish: 10% mindre spredning
+// Storage Shelves: plads til én raket mere i magasinet (kun raket-vaaben).
+// Kaldes hvor et raket-vaaben faar frisk timing (mission-start + nyt pickup).
+function applyShelvesBonus(id, ts) {
+  if (hasAcc('acc-shelves') && ROCKET_IDS.includes(id) && ts.magCap < ROCKET_MAG_MAX) {
+    ts.magCap++; ts.magazine++;
+  }
+}
+// Rengoering loefter Brians START-humoer: +1 trin pr. 30 moenter brugt.
+// Priserne laeses fra shoppens DOM saa de aldrig kommer ud af sync.
+const CLEANING_MOOD_COINS = 30;
+const CLEANING_COSTS = {};
+document.querySelectorAll('#shop .item[data-slot="cleaning"]').forEach(el => {
+  CLEANING_COSTS[el.dataset.item] = parseInt(el.dataset.cost, 10) || 0;
+});
+function cleaningMoodSteps() {
+  let spent = 0;
+  for (const id of owned.cleaning) spent += CLEANING_COSTS[id] || 0;
+  return Math.floor(spent / CLEANING_MOOD_COINS);
+}
+// Start-humoeret ved spawn: rengoering skubber trin op — MEN historie-stop med
+// fast humoer (sorgen efter ledger'en, vreden foer Warden) beholder deres tone;
+// et rent gulv aendrer ikke et historie-beat.
+function launchMood() {
+  if (hasGraduated && currentLeg().mood) return brianStartMood;
+  const idx = BRIAN_MOODS.indexOf(brianStartMood);
+  if (idx < 0) return brianStartMood;
+  // Loft: max +2 trin, og aldrig hoejere end StrongInterest ved start — de hoeje
+  // humoerer (Cheerful/Enthusiastic/Serenity) skal FORTJENES i kampen, ikke koebes.
+  // Starter man allerede hoejere (teoretisk), saenkes man dog ikke.
+  const capIdx = BRIAN_MOODS.indexOf('StrongInterest');
+  const steps = Math.min(cleaningMoodSteps(), 2);
+  return BRIAN_MOODS[Math.min(idx + steps, Math.max(idx, capIdx))];
+}
+
+// ===== SHIELD GENERATOR (up-shield) ============================================
+// Panik-vaernet: en blaa spejl-boble der stopper fjendtlige skud i 2 sekunder.
+// Koebes én gang i shoppen; derefter ÉN aktivering pr. kamp, og hver aktivering
+// koster SHIELD_COST moenter fra pungen — saa den gemmes til pressede situationer.
+// Desktop: SPACE. Touch: den runde skjold-knap over sigte-joysticken.
+const SHIELD_UPGRADE_ID = 'up-shield';
+const SHIELD_COST = 20;          // moenter pr. aktivering
+const SHIELD_DURATION = 2000;    // ms
+let shieldActive = false;
+let shieldT = 0;                 // ms siden aktivering
+let shieldUsedThisBattle = false;
+function hasShieldGen() { return owned.upgrades.includes(SHIELD_UPGRADE_ID); }
+function shieldRadius() { return (player.radius + 16) * WORLD_SCALE; }
+function canActivateShield() {
+  return hasShieldGen() && !shieldActive && !shieldUsedThisBattle &&
+         coins >= SHIELD_COST && player.alive && !player.dying && !overlayActive();
+}
+function activateShield() {
+  if (!canActivateShield()) return;
+  coins -= SHIELD_COST;
+  shieldActive = true;
+  shieldT = 0;
+  shieldUsedThisBattle = true;
+  sfxWeaponPickup({ volume: 0.9 });   // opadgaaende sweep = vaernet rejser sig
+  updateShieldUI();
+}
+// Knap/hint-tilstand. Cachet saa DOM kun roeres ved aendring (kaldes fra loopet).
+let shieldUIState = '';
+function updateShieldUI() {
+  const state = hasShieldGen()
+    ? (shieldUsedThisBattle ? 'spent' : (coins < SHIELD_COST ? 'broke' : 'ready'))
+    : 'none';
+  if (state === shieldUIState) return;
+  shieldUIState = state;
+  shieldBtnEl.classList.toggle('owned', state !== 'none');
+  shieldBtnEl.classList.toggle('spent', state === 'spent');
+  shieldBtnEl.classList.toggle('broke', state === 'broke');
+  controlsShieldEl.style.display = state !== 'none' ? '' : 'none';
+}
 
 function playTrack(el) {
   el.currentTime = 0;
@@ -2803,6 +2919,13 @@ window.addEventListener('keydown', e => {
     if (!e.repeat) pauseGame();
     return;
   }
+  // Skjold: SPACE aktiverer (guards ligger i canActivateShield). preventDefault
+  // saa mellemrum aldrig scroller siden.
+  if (e.code === 'Space') {
+    if (!e.repeat) activateShield();
+    e.preventDefault();
+    return;
+  }
   keys[e.code] = true;
   if (isMovementKey) e.preventDefault();
 });
@@ -2990,6 +3113,9 @@ window.addEventListener('touchstart', e => {
   // REPLAY TUTORIAL-knappen haandterer sit eget 'click' — et tap paa den maa ikke
   // samtidig taelle som "tryk hvor som helst = normal restart" paa game over.
   if (e.target.closest && e.target.closest('#replayTutorialBtn')) return;
+  // Skjold-knappen haandterer sit eget touchstart (aktivering skal ske paa TAP,
+  // ikke paa click 300ms senere midt i en kamp).
+  if (e.target.closest && e.target.closest('#shieldBtn')) return;
   if (advanceOverlayOnTouch()) e.preventDefault();
 }, { passive: false });
 
@@ -3457,6 +3583,7 @@ function startMissionWeapons() {
   activeWeapons = [equippedWeapon];
   weaponTiming = {};
   weaponTiming[equippedWeapon] = freshTiming();
+  applyShelvesBonus(equippedWeapon, weaponTiming[equippedWeapon]);   // Storage Shelves: +1 raket
   player.heat = 0;
   player.overheated = false;
   mgStuckFire = false;
@@ -3487,6 +3614,7 @@ function addActiveWeapon(id) {
   }
   activeWeapons.push(id);
   weaponTiming[id] = freshTiming();
+  applyShelvesBonus(id, weaponTiming[id]);   // Storage Shelves gaelder ogsaa opsamlede raketter
   if (id === 'weapon-mg') { player.heat = 0; player.overheated = false; }
   refreshWeaponHUD();
 }
@@ -3841,7 +3969,7 @@ function spawnPlayer() {
   player.shipType = equippedShip;
   player.scale = cfg.scale;
   player.radius = cfg.radius;
-  player.maxHits = cfg.maxHits;
+  player.maxHits = Math.round(cfg.maxHits * accHpMult());   // Coat Hanger: +10% skrog
   // Startpunkt i verden er arbitraert (kameraet definerer hvad man ser) —
   // skaermcentrum genbruges som world-origin og kameraet snappes dertil.
   player.x = canvas.width / 2;
@@ -3866,9 +3994,15 @@ function spawnPlayer() {
   startMissionWeapons();
   updateHullHUD();
   updateHeatHUD();
-  // Brian starter i brianStartMood ved nyt liv (Content foer cutscenen, Grief efter). Fremdrift nulstilles.
+  // Brian starter i brianStartMood ved nyt liv (Content foer cutscenen, Grief efter),
+  // loeftet af rengoerings-bonussen (launchMood). Fremdrift nulstilles.
   brianMoodProgress = 0;
-  setBrianMood(brianStartMood);
+  setBrianMood(launchMood());
+  // Skjold: nyt liv/ny kamp = frisk aktivering (én pr. kamp).
+  shieldActive = false;
+  shieldT = 0;
+  shieldUsedThisBattle = false;
+  updateShieldUI();
   mgStuckFire = false;
   laserCharge = 0;
   laserTarget = null;
@@ -4670,6 +4804,17 @@ replayTutorialBtnEl.addEventListener('click', e => {
   replayTutorial();
 });
 
+// Skjold-knap: touchstart aktiverer med det samme (preventDefault undertrykker
+// det syntetiske click bagefter); click daekker mus paa touch-laptops.
+shieldBtnEl.addEventListener('touchstart', e => {
+  e.preventDefault(); e.stopPropagation();
+  activateShield();
+}, { passive: false });
+shieldBtnEl.addEventListener('click', e => {
+  e.stopPropagation();
+  activateShield();
+});
+
 if (resumeAvailable) {
   titleEl.querySelector('.subtitle').textContent = 'THE JOURNEY CONTINUES';
   titleEl.querySelector('.briefing').innerHTML =
@@ -4934,7 +5079,7 @@ function update(now) {
   // --- Player thrust ---
   // Left/Right arrows rotate the thruster disc directly.
   // Up arrow ignites the engine (thrust opposite to disc orientation).
-  const ROTATE_SPEED = 4.16 * moodFx().thrustRot;  // mood-skaleret thruster-rotation
+  const ROTATE_SPEED = 4.16 * moodFx().thrustRot * accRotMult();  // mood + Pilot Seat
   const joyThrust = joystick.active && joystick.mag > 0;
   if (joyThrust) {
     // Joystick (touch): retningen man trykker = retningen skibet accelererer.
@@ -5002,7 +5147,7 @@ function update(now) {
   // Vaaben AKKUMULERES (pickups): base + opsamlede fyrer SIDELOEBENDE, hvert med
   // sin egen timing i weaponTiming, saa de ikke deler reload. MG: ~90ms cadence +
   // overheat-bar. Raket/rusty: 5-skuds burst (180ms) + 900ms reload. Laser: én stråle.
-  const rof = moodFx().rof;
+  const rof = moodFx().rof * accRofMult();   // Lighting Rig: +10% skudtakt
   // Fyrings-trigger: desktop = museknap; touch = hold sigte-joysticken.
   const mgHeld = aimstick.active && aimstick.mag > 0;
   const trigger = touchModeOn ? mgHeld : mouse.down;
@@ -5024,7 +5169,7 @@ function update(now) {
     const triggerHeld = trigger || (brianMood === 'Angry' && mgStuckFire);
     const wantFire = triggerHeld && !player.overheated;
     if (wantFire) {
-      player.heat += dtSec / 3;
+      player.heat += (dtSec / 3) * cleanHeatMult();   // Hull Polish: 10% langsommere opvarmning
       if (player.heat >= 1.0) { player.heat = 1.0; player.overheated = true; mgStuckFire = false; }
     } else {
       player.heat -= dtSec / 1.5;
@@ -5102,6 +5247,13 @@ function update(now) {
     }
   }
 
+  // --- Skjold: timer + UI-tilstand ---
+  if (shieldActive) {
+    shieldT += dt;
+    if (shieldT >= SHIELD_DURATION) shieldActive = false;
+  }
+  updateShieldUI();
+
   // --- Update enemy bullets ---
   for (let i = enemyBullets.length - 1; i >= 0; i--) {
     const b = enemyBullets[i];
@@ -5126,8 +5278,19 @@ function update(now) {
         Math.abs(b.y - player.y) > canvas.height * WORLD_SCREENS / 2) {
       enemyBullets.splice(i, 1);
     } else if (player.alive && !ambushWon) {
-      // Impact paa skroget?
       const pdx = b.x - player.x, pdy = b.y - player.y;
+      // Skjold foerst: skud der naar boblen proeller af i et ricochet-glimt —
+      // de naar aldrig skrog-testen nedenfor.
+      if (shieldActive) {
+        const sr = shieldRadius();
+        if (pdx*pdx + pdy*pdy < sr * sr) {
+          spawnExplosion(b.x, b.y, b.angle);
+          sfxRicochet({ volume: 0.8 });
+          enemyBullets.splice(i, 1);
+          continue;
+        }
+      }
+      // Impact paa skroget?
       if (pdx*pdx + pdy*pdy < ((player.radius + 3) * WORLD_SCALE) * ((player.radius + 3) * WORLD_SCALE)) {
         spawnExplosion(b.x, b.y, b.angle);
         // Knockback: ~15% af projektilets momentum overfoeres til skibet
@@ -6021,6 +6184,9 @@ function render() {
   // Player ship
   drawPlayer();
 
+  // Skjold-boblen oven paa skibet (verdens-koordinater, under laser/partikler)
+  drawShield();
+
   // Weak Laser-stråle (tegnes oven paa skibet saa den lancer ud fra taarnet)
   drawLaserBeam();
 
@@ -6034,6 +6200,36 @@ function render() {
 
   // Kant-pile mod fjender uden for skaermen (skaerm-koordinater, oven paa verden).
   drawOffscreenEnemyIndicators();
+}
+
+// Den blaa spejl-boble: glas-agtig fyld-gradient, lysende kant og to roterende
+// highlight-buer ("spejlet"). Fader hurtigt ind og toner ud i de sidste 20%.
+function drawShield() {
+  if (!shieldActive || !player.alive) return;
+  const t = shieldT / SHIELD_DURATION;
+  const fade = Math.min(1, t * 8) * (t > 0.8 ? (1 - t) / 0.2 : 1);
+  const r = shieldRadius();
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const g = ctx.createRadialGradient(0, 0, r * 0.55, 0, 0, r);
+  g.addColorStop(0,    'rgba(90, 170, 255, 0)');
+  g.addColorStop(0.85, 'rgba(110, 190, 255, ' + (0.10 * fade) + ')');
+  g.addColorStop(1,    'rgba(150, 215, 255, ' + (0.30 * fade) + ')');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(160, 220, 255, ' + (0.85 * fade) + ')';
+  ctx.shadowColor = 'rgba(120, 190, 255, 0.9)';
+  ctx.shadowBlur = 14;
+  ctx.stroke();
+  // Roterende spejl-glimt: en lang og en kort bue overfor hinanden.
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(225, 245, 255, ' + (0.7 * fade) + ')';
+  const a0 = shieldT * 0.004;
+  ctx.beginPath(); ctx.arc(0, 0, r - 2, a0, a0 + 0.7); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, r - 2, a0 + Math.PI, a0 + Math.PI + 0.4); ctx.stroke();
+  ctx.restore();
 }
 
 // Viser at de SAMME droner cirkler rundt i den 3-skaerme brede bane — ikke forsvinder
