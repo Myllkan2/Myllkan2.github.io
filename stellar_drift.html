@@ -105,6 +105,22 @@
     background: linear-gradient(180deg, rgba(255, 220, 150, 0.95), rgba(230, 140, 60, 0.9));
     box-shadow: 0 0 6px rgba(255, 180, 90, 0.45);
   }
+  /* Skjold-ladninger: blaa "skjold-formede" pips under raket/HEAT-blokkene —
+     fyldt = klar, toemt = brugt i denne kamp. Spejler raket-kanister-sproget. */
+  #hud .shield-block { margin-top: 14px; display: none; }
+  #hud .shield-block.visible { display: block; }
+  #hud .shield-pips { display: flex; gap: 5px; margin-top: 4px; }
+  #hud .shield-pip {
+    width: 13px;
+    height: 15px;
+    border: 1px solid rgba(140, 200, 255, 0.55);
+    border-radius: 6px 6px 50% 50%;   /* rundet bund: laeses som et lille skjold */
+    background: rgba(20, 32, 50, 0.45);
+  }
+  #hud .shield-pip.full {
+    background: linear-gradient(180deg, rgba(170, 220, 255, 0.95), rgba(80, 150, 235, 0.9));
+    box-shadow: 0 0 6px rgba(110, 180, 255, 0.5);
+  }
   /* HEAT-barometer (kun synligt naar MG er udstyret). Kaliber-teksten ved
      siden af HEAT viser MG'ens progression — vaaben-navnet holdes rent. */
   #hud .heat-block { margin-top: 14px; display: none; }
@@ -294,8 +310,8 @@
     background: rgba(170, 210, 255, 0.45);
   }
   /* Sigte-joystick: spejlvendt i hoejre side, varmere farve = "vaaben" */
-  /* Skjold-knap: over sigte-joysticken. .owned goer den synlig; .spent/.broke
-     dimmer den (brugt i denne kamp / ikke raad til aktiveringen). */
+  /* Skjold-knap: over sigte-joysticken. .owned goer den synlig; .spent dimmer
+     den naar alle ladninger er brugt i denne kamp. */
   #shieldBtn {
     display: none;
     position: fixed;
@@ -313,7 +329,7 @@
     cursor: pointer;
   }
   body.touch.combat #shieldBtn.owned { display: block; }
-  #shieldBtn.spent, #shieldBtn.broke { opacity: 0.3; }
+  #shieldBtn.spent { opacity: 0.3; }
   #aimstick {
     position: fixed;
     right: 28px;
@@ -1346,6 +1362,12 @@
       <span class="heat-pct" id="heatPct">0%</span>
     </div>
   </div>
+  <!-- Skjold-ladninger: én pip pr. mulig aktivering i denne kamp (fremtidige
+       opgraderinger giver 2-3 pips). Vises kun naar Shield Generator ejes. -->
+  <div class="shield-block" id="shieldBlock">
+    <div class="label">SHIELD</div>
+    <div class="shield-pips" id="shieldPips"></div>
+  </div>
 </div>
 
 <div id="portrait">
@@ -1510,7 +1532,7 @@
         <span class="item-cost">50 <span class="coin-pip"></span></span>
       </div>
       <div class="item" data-item="up-shield" data-cost="100" data-slot="upgrade">
-        <span class="item-name">Shield Generator <span class="item-note">2s bullet bubble &mdash; 1 use per battle, 20 coins per use</span></span>
+        <span class="item-name">Shield Generator <span class="item-note">blocks shots &amp; rams for 2s &mdash; 1 use per battle</span></span>
         <span class="item-cost">100 <span class="coin-pip"></span></span>
       </div>
     </div>
@@ -1689,6 +1711,8 @@ const shopLaunchBtn = document.getElementById('shopLaunch');
 const shopLaunchHintEl = document.getElementById('shopLaunchHint');
 const shieldBtnEl = document.getElementById('shieldBtn');
 const controlsShieldEl = document.getElementById('controlsShield');
+const shieldBlockEl = document.getElementById('shieldBlock');
+const shieldPipsEl = document.getElementById('shieldPips');
 const cutsceneEl = document.getElementById('cutscene');
 const ambushWinEl = document.getElementById('ambushWin');
 const ambushBountyEl = document.getElementById('ambushBounty');
@@ -2111,43 +2135,51 @@ function launchMood() {
 }
 
 // ===== SHIELD GENERATOR (up-shield) ============================================
-// Panik-vaernet: en blaa spejl-boble der stopper fjendtlige skud i 2 sekunder.
-// Koebes én gang i shoppen; derefter ÉN aktivering pr. kamp, og hver aktivering
-// koster SHIELD_COST moenter fra pungen — saa den gemmes til pressede situationer.
-// Desktop: SPACE. Touch: den runde skjold-knap over sigte-joysticken.
+// Panik-vaernet: en blaa spejl-boble der i 2 sekunder stopper fjendtlige skud OG
+// garderer mod skibs-kollisioner (fjender preller af paa boblen). Koebes én gang
+// i shoppen; gratis at aktivere — ladnings-begraenset i stedet for moent-betalt,
+// saa spilleren tør bruge den i kampens hede. shieldChargesMax() er forberedt til
+// fremtidige opgraderinger (2-3 ladninger pr. kamp); HUD'en viser pips under
+// raket/HEAT-indikatorerne. Desktop: SPACE. Touch: skjold-knappen over joysticken.
 const SHIELD_UPGRADE_ID = 'up-shield';
-const SHIELD_COST = 20;          // moenter pr. aktivering
 const SHIELD_DURATION = 2000;    // ms
 let shieldActive = false;
 let shieldT = 0;                 // ms siden aktivering
-let shieldUsedThisBattle = false;
+let shieldCharges = 0;           // ladninger tilbage i denne kamp
 function hasShieldGen() { return owned.upgrades.includes(SHIELD_UPGRADE_ID); }
+// Max ladninger pr. kamp — fremtidige opgraderinger (up-shield-2/-3) haever tallet.
+function shieldChargesMax() { return hasShieldGen() ? 1 : 0; }
 function shieldRadius() { return (player.radius + 16) * WORLD_SCALE; }
 function canActivateShield() {
-  return hasShieldGen() && !shieldActive && !shieldUsedThisBattle &&
-         coins >= SHIELD_COST && player.alive && !player.dying && !overlayActive();
+  return shieldCharges > 0 && !shieldActive &&
+         player.alive && !player.dying && !overlayActive();
 }
 function activateShield() {
   if (!canActivateShield()) return;
-  coins -= SHIELD_COST;
+  shieldCharges--;
   shieldActive = true;
   shieldT = 0;
-  shieldUsedThisBattle = true;
   sfxWeaponPickup({ volume: 0.9 });   // opadgaaende sweep = vaernet rejser sig
   updateShieldUI();
 }
-// Knap/hint-tilstand. Cachet saa DOM kun roeres ved aendring (kaldes fra loopet).
+// Knap/hint/HUD-pips. Cachet saa DOM kun roeres ved aendring (kaldes fra loopet).
 let shieldUIState = '';
 function updateShieldUI() {
-  const state = hasShieldGen()
-    ? (shieldUsedThisBattle ? 'spent' : (coins < SHIELD_COST ? 'broke' : 'ready'))
-    : 'none';
-  if (state === shieldUIState) return;
-  shieldUIState = state;
+  const max = shieldChargesMax();
+  const state = max > 0 ? (shieldCharges > 0 ? 'ready' : 'spent') : 'none';
+  const key = state + ':' + shieldCharges + '/' + max;
+  if (key === shieldUIState) return;
+  shieldUIState = key;
   shieldBtnEl.classList.toggle('owned', state !== 'none');
   shieldBtnEl.classList.toggle('spent', state === 'spent');
-  shieldBtnEl.classList.toggle('broke', state === 'broke');
   controlsShieldEl.style.display = state !== 'none' ? '' : 'none';
+  // HUD: én pip pr. mulig ladning, fyldt = stadig klar (spejler raket-kanistrene).
+  shieldBlockEl.classList.toggle('visible', max > 0);
+  let html = '';
+  for (let i = 0; i < max; i++) {
+    html += '<div class="shield-pip' + (i < shieldCharges ? ' full' : '') + '"></div>';
+  }
+  shieldPipsEl.innerHTML = html;
 }
 
 function playTrack(el) {
@@ -4001,10 +4033,10 @@ function spawnPlayer() {
   // loeftet af rengoerings-bonussen (launchMood). Fremdrift nulstilles.
   brianMoodProgress = 0;
   setBrianMood(launchMood());
-  // Skjold: nyt liv/ny kamp = frisk aktivering (én pr. kamp).
+  // Skjold: nyt liv/ny kamp = fuldt ladningslager (1 nu; opgraderinger haever max).
   shieldActive = false;
   shieldT = 0;
-  shieldUsedThisBattle = false;
+  shieldCharges = shieldChargesMax();
   updateShieldUI();
   mgStuckFire = false;
   laserCharge = 0;
@@ -5955,7 +5987,10 @@ function handleShipCollision(e) {
   const dx = player.x - e.x;
   const dy = player.y - e.y;
   const distSq = dx * dx + dy * dy;
-  const minDist = (player.radius + e.radius) * WORLD_SCALE;
+  // Skjold aktivt: fjender preller af paa BOBLEN (stoerre radius), ikke skroget.
+  const minDist = shieldActive
+    ? shieldRadius() + e.radius * WORLD_SCALE
+    : (player.radius + e.radius) * WORLD_SCALE;
   if (distSq >= minDist * minDist) return;
   const dist = Math.sqrt(distSq) || 0.001;
   const nx = dx / dist;   // peger fra fjende mod player
@@ -5998,9 +6033,10 @@ function handleShipCollision(e) {
     e.vx -= nx * impulse * 0.5;
     e.vy -= ny * impulse * 0.5;
   }
-  // Applikér N hits paa hver
+  // Applikér N hits paa hver — men skjoldet garderer spilleren: fjenden slaar
+  // sig stadig paa boblen (og bouncer via impuls-koden ovenfor), skroget gaar fri.
   for (let k = 0; k < damage; k++) {
-    applyPlayerHit(nx, ny);
+    if (!shieldActive) applyPlayerHit(nx, ny);
     applyEnemyHit(e, -nx, -ny);
   }
 }
