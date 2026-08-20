@@ -2908,9 +2908,10 @@ window.addEventListener('keydown', e => {
     return;
   }
   // Game over: hvilken som helst tast genstarter. Ignorer auto-repeats saa en
-  // tast der holdes nede gennem dødsanimationen ikke triggerer instant restart.
+  // tast der holdes nede gennem dødsanimationen ikke triggerer instant restart —
+  // og respekter input-naaden (gameOverInputReady) mod stray-tryk lige efter doeden.
   if (!player.alive) {
-    if (!e.repeat) restartGame();
+    if (!e.repeat && gameOverInputReady) restartGame();
     if (isMovementKey) e.preventDefault();
     return;
   }
@@ -3094,7 +3095,9 @@ function advanceOverlayOnTouch() {
   if (familyCutsceneVisible) return false;  // kun skip-knappen (DOM 'click')
   if (shopVisible)           return false;  // shoppen styres af DOM-knapper
   if (cutsceneVisible)     { cutsceneEl.classList.remove('visible'); cutsceneVisible = false; restartGame(); return true; }
-  if (!player.alive)       { restartGame(); return true; }
+  // Game over: konsumer tappet uanset (intet andet maa reagere), men genstart
+  // foerst naar input-naaden er udloebet.
+  if (!player.alive)       { if (gameOverInputReady) restartGame(); return true; }
   return false;
 }
 
@@ -4799,9 +4802,30 @@ function replayTutorial() {
   tutorialStep = 0;
   restartGame();
 }
+// Input-naade paa game over: en spiller der doer midt i at skyde, tapper ofte
+// stadig — overlayet ignorerer ALLE tryk det foerste sekund, saa et stray-tap
+// hverken genstarter eller rammer replay-knappen (samme moenster som
+// ambushInputReady's lockout paa sejr-skaermen).
+let gameOverInputReady = false;
+let gameOverGraceTimer = null;
+// To-tryks vaern paa replay (samme moenster som START NEW GAME): foerste tryk
+// armerer ("REPLAY THE TRAINING?"), andet tryk starter — et vildfarent tap paa
+// den centrerede knap koster saa ingenting.
+let replayArmed = false;
+function armOrReplayTutorial() {
+  if (!gameOverInputReady) return;
+  if (!replayArmed) {
+    replayArmed = true;
+    replayTutorialBtnEl.textContent = 'REPLAY THE TRAINING?';
+    return;
+  }
+  replayArmed = false;
+  replayTutorialBtnEl.textContent = 'REPLAY TUTORIAL';
+  replayTutorial();
+}
 replayTutorialBtnEl.addEventListener('click', e => {
   e.stopPropagation();   // maa ikke ogsaa taelle som "tryk = normal restart"
-  replayTutorial();
+  armOrReplayTutorial();
 });
 
 // Skjold-knap: touchstart aktiverer med det samme (preventDefault undertrykker
@@ -5036,6 +5060,12 @@ function update(now) {
       sfxBigExplosion({ volume: 1.5 });
       // Tag-en CSS-klasse paa for at fade Game Over-overlayet ind (0.5s delay + 1s).
       gameOverEl.classList.add('visible');
+      // Input-naade + nulstil replay-vaernet (se armOrReplayTutorial).
+      gameOverInputReady = false;
+      replayArmed = false;
+      replayTutorialBtnEl.textContent = 'REPLAY TUTORIAL';
+      clearTimeout(gameOverGraceTimer);
+      gameOverGraceTimer = setTimeout(() => { gameOverInputReady = true; }, 1000);
       // Foer playlist-mode: skift fra gameplay-musik tilbage til titelmusik paa
       // Game Over. I playlist-mode lader vi playlisten loebe videre, saa musikken
       // er ubrudt naar spilleren trykker restart.
